@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { MapPin, Info } from "lucide-react";
 import {
   calculateShippingEstimate,
@@ -15,8 +15,19 @@ const DeliveryInfo = () => {
   const [error, setError] = useState<string | null>(null);
   const [address, setAddress] = useState<ViaCepResult | null>(null);
   const [shipping, setShipping] = useState<{ price: number; days: number } | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  // QA: Abortamos requisicoes anteriores para evitar que respostas antigas sobrescrevam o estado.
 
   const rawCep = cleanCep(cep);
+
+  useEffect(() => {
+    return () => {
+      if (requestRef.current) {
+        requestRef.current.abort();
+        requestRef.current = null;
+      }
+    };
+  }, []);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setCep(formatCep(event.target.value));
@@ -32,19 +43,35 @@ const DeliveryInfo = () => {
     setShipping(null);
 
     if (rawCep.length !== 8) {
+      requestRef.current?.abort();
+      requestRef.current = null;
+      setLoading(false);
       setError("CEP invalido. Informe 8 digitos.");
       return;
     }
 
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
     setLoading(true);
     try {
-      const data = await fetchAddressByCep(rawCep);
+      const data = await fetchAddressByCep(rawCep, { signal: controller.signal });
+      if (requestRef.current !== controller) return;
       setAddress(data);
       setShipping(calculateShippingEstimate(rawCep));
+      setError(null);
     } catch (err: any) {
+      if ((err as DOMException)?.name === "AbortError") {
+        return;
+      }
+      if (requestRef.current !== controller) return;
       setError(err?.message ?? "Erro ao consultar CEP. Tente novamente.");
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) {
+        setLoading(false);
+        requestRef.current = null;
+      }
     }
   };
 

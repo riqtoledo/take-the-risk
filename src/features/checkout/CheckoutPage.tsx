@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Newsletter from "@/components/Newsletter";
 import Footer from "@/components/Footer";
@@ -56,6 +56,8 @@ const CheckoutPage = () => {
   const [addressDetails, setAddressDetails] = useState<DeliveryAddressDetails>(defaultAddressDetails);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const shippingRequestRef = useRef<AbortController | null>(null);
+  // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
 
   useEffect(() => {
     try {
@@ -83,6 +85,15 @@ const CheckoutPage = () => {
     }
   }, [personalInfo, deliveryMode, cep, addressDetails, addressConfirmed]);
 
+  useEffect(() => {
+    return () => {
+      if (shippingRequestRef.current) {
+        shippingRequestRef.current.abort();
+        shippingRequestRef.current = null;
+      }
+    };
+  }, []);
+
   const isFreeShipping = subtotal >= 50;
   const shippingCost = useMemo(() => {
     if (isFreeShipping) return 0;
@@ -109,16 +120,24 @@ const CheckoutPage = () => {
   const handleCalculateShipping = async () => {
     const cleaned = cleanCep(cep);
     if (cleaned.length !== 8) {
+      shippingRequestRef.current?.abort();
+      shippingRequestRef.current = null;
       setCepError("Informe um CEP valido com 8 digitos.");
       setAddress(null);
       setShippingEstimate(null);
+      setIsCalculatingCep(false);
       return;
     }
+
+    shippingRequestRef.current?.abort();
+    const controller = new AbortController();
+    shippingRequestRef.current = controller;
 
     setIsCalculatingCep(true);
     setCepError(null);
     try {
-      const addressInfo = await fetchAddressByCep(cleaned);
+      const addressInfo = await fetchAddressByCep(cleaned, { signal: controller.signal });
+      if (shippingRequestRef.current !== controller) return;
       setAddress(addressInfo);
       setShippingEstimate(calculateShippingEstimate(cleaned));
       setAddressDetails((prev) => ({
@@ -130,12 +149,20 @@ const CheckoutPage = () => {
         country: prev.country || "Brasil",
       }));
       setAddressConfirmed(false);
+      setCepError(null);
     } catch (error: any) {
+      if ((error as DOMException)?.name === "AbortError") {
+        return;
+      }
+      if (shippingRequestRef.current !== controller) return;
       setCepError(error?.message ?? "Nao foi possivel calcular o frete.");
       setAddress(null);
       setShippingEstimate(null);
     } finally {
-      setIsCalculatingCep(false);
+      if (shippingRequestRef.current === controller) {
+        setIsCalculatingCep(false);
+        shippingRequestRef.current = null;
+      }
     }
   };
 
@@ -183,26 +210,23 @@ const CheckoutPage = () => {
     }
   };
 
-  const hasValidCep = deliveryMode === "pickup" ? false : cleanCep(cep).length === 8;
-  const hasAddressInfo = deliveryMode === "pickup" ? false : addressDetails.street.trim().length > 0;
-  const hasNumber = deliveryMode === "pickup" ? false : addressDetails.number.trim().length > 0;
-  const canConfirmDelivery = deliveryMode === "delivery" && addressConfirmed;
-  const isFormValid =
-    items.length > 0 &&
-    personalInfo.name.trim().length > 2 &&
-    personalInfo.email.includes("@") &&
-    personalInfo.phone.replace(/\D/g, "").length >= 10 &&
-    hasValidCep &&
-    hasAddressInfo &&
-    hasNumber &&
-    canConfirmDelivery &&
-    paymentMethod === "pix";
+  const cleanedPhoneDigits = personalInfo.phone.replace(/\D/g, "");
+  const hasContactInfo =
+    personalInfo.name.trim().length > 2 && personalInfo.email.includes("@") && cleanedPhoneDigits.length >= 10;
+  const requiresAddress = deliveryMode === "delivery";
+  // QA: A validacao considera retirada sem exigir CEP/endereco, preservando o fluxo existente.
+  const hasValidCep = cleanCep(cep).length === 8;
+  const hasAddressInfo = addressDetails.street.trim().length > 0;
+  const hasNumber = addressDetails.number.trim().length > 0;
+  const isAddressComplete = hasValidCep && hasAddressInfo && hasNumber;
+  const canSubmitDelivery = !requiresAddress || (addressConfirmed && isAddressComplete);
+  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery && paymentMethod === "pix";
 
   const handleFinishOrder = async () => {
     if (!isFormValid || isSubmitting) return;
     setIsSubmitting(true);
     const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
-    const cleanedPhone = personalInfo.phone.replace(/\D/g, "");
+    const cleanedPhone = cleanedPhoneDigits;
 
     const orderTotal = total;
     const amountInCents = Math.max(Math.round(orderTotal * 100), 0);

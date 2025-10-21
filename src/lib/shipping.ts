@@ -28,10 +28,17 @@ export const calculateShippingEstimate = (cep: string): ShippingEstimate => {
   return { price: 14.9, days: 10 };
 };
 
-export const fetchAddressByCep = async (cep: string): Promise<ViaCepResult> => {
+type FetchAddressOptions = {
+  signal?: AbortSignal;
+};
+
+export const fetchAddressByCep = async (cep: string, options: FetchAddressOptions = {}): Promise<ViaCepResult> => {
   const clean = cleanCep(cep);
   if (clean.length !== 8) throw new Error("CEP invalido");
-  const response = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+  // QA: Permitimos passar um AbortSignal para cancelar buscas concorrentes e evitar race conditions.
+  const response = await fetch(`https://viacep.com.br/ws/${clean}/json/`, {
+    signal: options.signal,
+  });
   if (!response.ok) throw new Error("Falha ao buscar CEP");
   const data: ViaCepResult = await response.json();
   if (data.erro) throw new Error("CEP nao encontrado");
