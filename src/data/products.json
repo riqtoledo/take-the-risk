@@ -1,0 +1,163 @@
+{
+  "products": [
+    {
+      "id": "pampers-g-98",
+      "name": "Fralda Pampers Confort Sec G 98 Unidades",
+      "shortDescription": "Fralda Pampers Confort Sec G - 98 unidades",
+      "description": "Fralda Pampers Confort Sec tamanho G com 98 unidades. Oferece absorcao rapida e protecao contra vazamentos, com ajuste confortavel para o bebe e toque macio.",
+      "price": 198.0,
+      "oldPrice": 214.9,
+      "shippingPrice": 12.9,
+      "badgeLabel": "Economico",
+      "promotion": {
+        "title": "Leve 2 pague R$ 135,74 (cada)",
+        "subtitle": "Compre 2 ou mais e economize"
+      },
+      "sales": {
+        "percentage": 96,
+        "count": 100108
+      },
+      "images": [
+        "@assets/product-main.png",
+        "@assets/product-main.png"
+      ],
+      "reviews": [
+        {
+          "user": "Luiz",
+          "rating": 5,
+          "comment": "Muito absorvente e pratico para a noite inteira."
+        },
+        {
+          "user": "Carlos",
+          "rating": 4,
+          "comment": "Boa qualidade e chegou dentro do prazo."
+        },
+        {
+          "user": "Fernanda",
+          "rating": 5,
+          "comment": "Bebe fica sequinho por mais tempo, recomendo."
+        }
+      ],
+      "relatedIds": [
+        "wipes-sensitive-50",
+        "pampers-m-80",
+        "kit-troca-rapida"
+      ]
+    },
+    {
+      "id": "wipes-sensitive-50",
+      "name": "Lencos Umedecidos Sensitive 50 Unidades",
+      "shortDescription": "Lenco umedecido hipoalergenico para pele sensivel",
+      "description": "Lencos umedecidos suaves e hipoalergenicos, ideais para a pele delicada do bebe. Embalagem com 50 unidades e fechamento que preserva a umidade.",
+      "price": 9.5,
+      "shippingPrice": 5.0,
+      "badgeLabel": "Mais vendido",
+      "promotion": {
+        "title": "Na compra de 3 unidades ganhe 10% off",
+        "subtitle": "Desconto aplicado automaticamente no carrinho"
+      },
+      "sales": {
+        "percentage": 92,
+        "count": 45231
+      },
+      "images": [
+        "@assets/product-main.png"
+      ],
+      "reviews": [
+        {
+          "user": "Mariana",
+          "rating": 5,
+          "comment": "Muito macio e nao irrita a pele sensivel do meu bebe."
+        },
+        {
+          "user": "Joao",
+          "rating": 4,
+          "comment": "Cheiro suave e embalagem pratica, so poderia vir com mais unidades."
+        }
+      ],
+      "relatedIds": [
+        "pampers-g-98",
+        "kit-troca-rapida"
+      ]
+    },
+    {
+      "id": "pampers-m-80",
+      "name": "Fralda Pampers Confort Sec M 80 Unidades",
+      "shortDescription": "Fralda Pampers Confort Sec M - 80 unidades",
+      "description": "Fralda com alto poder de absorcao e barreiras reforcadas contra vazamentos. Indicada para uso diurno e noturno com ajuste anatomico.",
+      "price": 165.0,
+      "oldPrice": 189.9,
+      "shippingPrice": 10.0,
+      "badgeLabel": "Novo",
+      "promotion": {
+        "title": "Assine e ganhe 12% off na recorrencia",
+        "subtitle": "Cancelamento facil e sem taxa"
+      },
+      "sales": {
+        "percentage": 89,
+        "count": 83422
+      },
+      "images": [
+        "@assets/product-main.png"
+      ],
+      "reviews": [
+        {
+          "user": "Bruna",
+          "rating": 4,
+          "comment": "Boa absorcao mas o ajuste poderia ser um pouco mais firme."
+        },
+        {
+          "user": "Paulo",
+          "rating": 5,
+          "comment": "Fralda favorita aqui em casa, segura bem e nao deixa cheiro."
+        },
+        {
+          "user": "Isabela",
+          "rating": 4,
+          "comment": "Meio cara, mas a qualidade compensa."
+        }
+      ],
+      "relatedIds": [
+        "pampers-g-98",
+        "wipes-sensitive-50",
+        "kit-troca-rapida"
+      ]
+    },
+    {
+      "id": "kit-troca-rapida",
+      "name": "Kit Troca Rapida com Bolsa Organizador",
+      "shortDescription": "Kit com tapete, lencos e pomada em miniaturas",
+      "description": "Kit completo para trocas fora de casa composto por bolsa dobravel, tapete impermeavel, lencos umedecidos de bolso e mini pomada para assaduras.",
+      "price": 79.9,
+      "shippingPrice": 7.5,
+      "badgeLabel": "Exclusivo online",
+      "promotion": {
+        "title": "Frete gratis acima de R$ 149,00",
+        "subtitle": "Combine com outros itens e economize"
+      },
+      "sales": {
+        "percentage": 94,
+        "count": 25210
+      },
+      "images": [
+        "@assets/product-main.png"
+      ],
+      "reviews": [
+        {
+          "user": "Tatiane",
+          "rating": 5,
+          "comment": "Bolsa muito pratica e cabe tudo que preciso nas saídas."
+        },
+        {
+          "user": "Rafael",
+          "rating": 4,
+          "comment": "Tapete impermeavel de otima qualidade, poderia ter mais pomada."
+        }
+      ],
+      "relatedIds": [
+        "pampers-g-98",
+        "wipes-sensitive-50"
+      ]
+    }
+  ]
+}

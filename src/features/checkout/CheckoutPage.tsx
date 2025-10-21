@@ -1,0 +1,288 @@
+import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Header from "@/components/Header";
+import Newsletter from "@/components/Newsletter";
+import Footer from "@/components/Footer";
+import { useCart } from "@/context/CartContext";
+import PersonalInfoSection, { PersonalInfo } from "./components/PersonalInfoSection";
+import DeliverySection, { DeliveryMode, DeliveryAddressDetails } from "./components/DeliverySection";
+import PaymentSection, { PaymentMethod } from "./components/PaymentSection";
+import OrderSummary from "./components/OrderSummary";
+import CheckoutSummaryBar from "./components/CheckoutSummaryBar";
+import { toast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+import {
+  calculateShippingEstimate,
+  cleanCep,
+  fetchAddressByCep,
+  formatCep,
+  stringifyAddress,
+  ShippingEstimate,
+  ViaCepResult,
+} from "@/lib/shipping";
+
+const STORAGE_KEY = "checkout_draft";
+
+const defaultAddressDetails: DeliveryAddressDetails = {
+  street: "",
+  number: "",
+  complement: "",
+  reference: "",
+  neighborhood: "",
+  city: "",
+  state: "",
+  country: "Brasil",
+};
+
+const CheckoutPage = () => {
+  const navigate = useNavigate();
+  const { items, subtotal } = useCart();
+
+  const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
+    name: "",
+    email: "",
+    phone: "",
+  });
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("delivery");
+  const [cep, setCep] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
+
+  const [isCalculatingCep, setIsCalculatingCep] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
+  const [address, setAddress] = useState<ViaCepResult | null>(null);
+  const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimate | null>(null);
+  const [addressDetails, setAddressDetails] = useState<DeliveryAddressDetails>(defaultAddressDetails);
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.personalInfo) setPersonalInfo(parsed.personalInfo);
+      if (parsed?.deliveryMode) setDeliveryMode(parsed.deliveryMode);
+      if (typeof parsed?.cep === "string") setCep(parsed.cep);
+      if (parsed?.addressDetails) {
+        setAddressDetails({ ...defaultAddressDetails, ...parsed.addressDetails });
+      }
+      if (typeof parsed?.addressConfirmed === "boolean") setAddressConfirmed(parsed.addressConfirmed);
+    } catch {
+      // ignore malformed storage
+    }
+  }, []);
+
+  useEffect(() => {
+    const payload = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage write errors
+    }
+  }, [personalInfo, deliveryMode, cep, addressDetails, addressConfirmed]);
+
+  const isFreeShipping = subtotal >= 50;
+  const shippingCost = useMemo(() => {
+    if (isFreeShipping) return 0;
+    return shippingEstimate?.price ?? 0;
+  }, [isFreeShipping, shippingEstimate]);
+
+  const total = useMemo(() => subtotal + (isFreeShipping ? 0 : shippingCost), [subtotal, shippingCost, isFreeShipping]);
+
+  const handleCepChange = (value: string) => {
+    setCep(formatCep(value));
+    setCepError(null);
+    setAddress(null);
+    setShippingEstimate(null);
+    setAddressDetails((prev) => ({
+      ...prev,
+      street: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+    }));
+    setAddressConfirmed(false);
+  };
+
+  const handleCalculateShipping = async () => {
+    const cleaned = cleanCep(cep);
+    if (cleaned.length !== 8) {
+      setCepError("Informe um CEP valido com 8 digitos.");
+      setAddress(null);
+      setShippingEstimate(null);
+      return;
+    }
+
+    setIsCalculatingCep(true);
+    setCepError(null);
+    try {
+      const addressInfo = await fetchAddressByCep(cleaned);
+      setAddress(addressInfo);
+      setShippingEstimate(calculateShippingEstimate(cleaned));
+      setAddressDetails((prev) => ({
+        ...prev,
+        street: addressInfo.logradouro ?? prev.street,
+        neighborhood: addressInfo.bairro ?? prev.neighborhood,
+        city: addressInfo.localidade ?? prev.city,
+        state: addressInfo.uf ?? prev.state,
+        country: prev.country || "Brasil",
+      }));
+      setAddressConfirmed(false);
+    } catch (error: any) {
+      setCepError(error?.message ?? "Nao foi possivel calcular o frete.");
+      setAddress(null);
+      setShippingEstimate(null);
+    } finally {
+      setIsCalculatingCep(false);
+    }
+  };
+
+  const handleAddressDetailsChange = (details: DeliveryAddressDetails) => {
+    setAddressDetails(details);
+    setAddressConfirmed(false);
+  };
+
+  const handleEditAddress = () => {
+    setAddressConfirmed(false);
+  };
+
+  const handleDeliveryModeChange = (mode: DeliveryMode) => {
+    setDeliveryMode(mode);
+    if (mode === "pickup") {
+      setAddressConfirmed(true);
+    } else {
+      setAddressConfirmed(false);
+    }
+  };
+
+  const handleConfirmAddress = () => {
+    if (deliveryMode === "pickup") {
+      setAddressConfirmed(true);
+      return;
+    }
+    const hasStreet = addressDetails.street.trim().length > 0;
+    const hasNumber = addressDetails.number.trim().length > 0;
+    const hasNeighborhood = addressDetails.neighborhood.trim().length > 0;
+    const hasCity = addressDetails.city.trim().length > 0;
+    const hasState = addressDetails.state.trim().length > 0;
+    if (hasStreet && hasNumber && hasNeighborhood && hasCity && hasState) {
+      setAddressConfirmed(true);
+      toast({
+        title: "Endereco confirmado",
+        description: "Os dados foram salvos com sucesso.",
+      });
+    } else {
+      setAddressConfirmed(false);
+      toast({
+        title: "Complete os campos",
+        description: "Informe rua, numero, bairro, cidade e estado para confirmar.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const hasValidCep = deliveryMode === "pickup" ? false : cleanCep(cep).length === 8;
+  const hasAddressInfo = deliveryMode === "pickup" ? false : addressDetails.street.trim().length > 0;
+  const hasNumber = deliveryMode === "pickup" ? false : addressDetails.number.trim().length > 0;
+  const canConfirmDelivery = deliveryMode === "delivery" && addressConfirmed;
+  const isFormValid =
+    items.length > 0 &&
+    personalInfo.name.trim().length > 2 &&
+    personalInfo.email.includes("@") &&
+    personalInfo.phone.replace(/\D/g, "").length >= 10 &&
+    hasValidCep &&
+    hasAddressInfo &&
+    hasNumber &&
+    canConfirmDelivery &&
+    paymentMethod === "pix";
+
+  const handleFinishOrder = () => {
+    if (!isFormValid) return;
+    const payload = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage errors
+    }
+    navigate("/checkout/pix");
+  };
+
+  return (
+    <div className="relative min-h-screen bg-background pb-32 text-foreground">
+      <Header />
+
+      <main className="container mx-auto px-4 py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-foreground">Finalizar compra</h1>
+          <p className="text-sm text-muted-foreground">Revise seus dados e conclua o pagamento.</p>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
+            Nenhum item na cesta.{" "}
+            <button className="text-primary underline" onClick={() => navigate("/")}>
+              Voltar para a loja
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="space-y-6">
+              <PersonalInfoSection value={personalInfo} onChange={setPersonalInfo} />
+              <DeliverySection
+                mode={deliveryMode}
+                onModeChange={handleDeliveryModeChange}
+                cep={cep}
+                onCepChange={handleCepChange}
+                onCalculateShipping={handleCalculateShipping}
+                isCalculating={isCalculatingCep}
+                cepError={cepError}
+                addressSummary={stringifyAddress(address)}
+                addressDetails={addressDetails}
+                onAddressDetailsChange={handleAddressDetailsChange}
+                onConfirmAddress={handleConfirmAddress}
+                onEditAddress={handleEditAddress}
+                isAddressConfirmed={addressConfirmed}
+                isFreeShipping={isFreeShipping}
+                shippingCost={shippingCost}
+              />
+              <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <h2 className="text-base font-semibold text-foreground">Pacotes e prazos</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Pedido entregue em 1 etapa. Confira o prazo estimado abaixo.
+                </p>
+                <div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm">
+                  <p className="font-semibold text-foreground">Entrega unica</p>
+                  <span className="text-muted-foreground">
+                    {shippingEstimate ? `Chega em ate ${shippingEstimate.days} dias uteis.` : "Informe o CEP para estimar o prazo."}
+                  </span>
+                </div>
+              </section>
+              <PaymentSection selected={paymentMethod} onChange={setPaymentMethod} />
+              <div className="rounded-xl border border-border bg-primary/10 p-4 text-sm font-semibold text-primary">
+                Finalize com Pix para confirmar seu pedido imediatamente.
+              </div>
+              <button
+                type="button"
+                className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!isFormValid}
+                onClick={handleFinishOrder}
+              >
+                Finalizar compra
+              </button>
+            </div>
+
+            <OrderSummary shippingCost={shippingCost} isFreeShipping={isFreeShipping} />
+          </div>
+        )}
+      </main>
+
+      <Newsletter />
+      <Footer />
+
+      {items.length > 0 ? (
+        <CheckoutSummaryBar total={total} disabled={!isFormValid} onSubmit={handleFinishOrder} />
+      ) : null}
+    </div>
+  );
+};
+
+export default CheckoutPage;

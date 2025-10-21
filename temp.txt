@@ -1,0 +1,7 @@
+ items-center gap-2">
+              {/* Simple blue offers pill (replaces complex pill) */}
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  aria-label="Ofertas por região"
+           
