@@ -32,3 +32,24 @@
     outline: 2px solid rgba(37, 99, 235, 0.24);
     outline-offset: 2px;
 }
+
+.promo-marquee {
+    position: relative;
+    overflow: hidden;
+}
+
+.promo-marquee__inner {
+    display: inline-block;
+    white-space: nowrap;
+    padding-left: 100%;
+    animation: promo-marquee-scroll 18s linear infinite;
+}
+
+@keyframes promo-marquee-scroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}

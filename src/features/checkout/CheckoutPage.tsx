@@ -10,6 +10,7 @@ import OrderSummary from "./components/OrderSummary";
 import CheckoutSummaryBar from "./components/CheckoutSummaryBar";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import {
   calculateShippingEstimate,
   cleanCep,
@@ -19,6 +20,8 @@ import {
   ShippingEstimate,
   ViaCepResult,
 } from "@/lib/shipping";
+import { createPixTransaction } from "@/lib/pix";
+import { savePixSession } from "./pixSession";
 
 const STORAGE_KEY = "checkout_draft";
 
@@ -52,6 +55,7 @@ const CheckoutPage = () => {
   const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimate | null>(null);
   const [addressDetails, setAddressDetails] = useState<DeliveryAddressDetails>(defaultAddressDetails);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     try {
@@ -194,15 +198,57 @@ const CheckoutPage = () => {
     canConfirmDelivery &&
     paymentMethod === "pix";
 
-  const handleFinishOrder = () => {
-    if (!isFormValid) return;
-    const payload = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
+  const handleFinishOrder = async () => {
+    if (!isFormValid || isSubmitting) return;
+    setIsSubmitting(true);
+    const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
+    const cleanedPhone = personalInfo.phone.replace(/\D/g, "");
+
+    const orderTotal = total;
+    const amountInCents = Math.max(Math.round(orderTotal * 100), 0);
+    const externalRef = `PED-${Date.now()}`;
+    const description = `Pedido ${externalRef}`;
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(checkoutSnapshot));
     } catch {
       // ignore storage errors
     }
-    navigate("/checkout/pix");
+
+    try {
+      const transaction = await createPixTransaction({
+        name: personalInfo.name.trim(),
+        email: personalInfo.email.trim(),
+        phone: cleanedPhone,
+        amount: amountInCents,
+        description,
+        externalRef,
+      });
+
+      const pixSession = {
+        id: transaction.id,
+        status: transaction.status,
+        paid: transaction.paid ?? false,
+        amount: transaction.amount ?? amountInCents,
+        externalRef,
+        pix: transaction.pix,
+        snapshot: checkoutSnapshot,
+        createdAt: new Date().toISOString(),
+      };
+
+      savePixSession(pixSession);
+
+      navigate("/checkout/pix", { state: { transactionId: transaction.id } });
+    } catch (error: any) {
+      const message = error?.message ?? "Nao foi possivel gerar o pagamento Pix. Tente novamente.";
+      toast({
+        title: "Erro ao gerar PIX",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -262,10 +308,19 @@ const CheckoutPage = () => {
               <button
                 type="button"
                 className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!isFormValid}
-                onClick={handleFinishOrder}
+                disabled={!isFormValid || isSubmitting}
+                onClick={() => {
+                  void handleFinishOrder();
+                }}
               >
-                Finalizar compra
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Gerando PIX...
+                  </span>
+                ) : (
+                  "Finalizar compra"
+                )}
               </button>
             </div>
 
@@ -278,7 +333,14 @@ const CheckoutPage = () => {
       <Footer />
 
       {items.length > 0 ? (
-        <CheckoutSummaryBar total={total} disabled={!isFormValid} onSubmit={handleFinishOrder} />
+        <CheckoutSummaryBar
+          total={total}
+          disabled={!isFormValid || isSubmitting}
+          loading={isSubmitting}
+          onSubmit={() => {
+            void handleFinishOrder();
+          }}
+        />
       ) : null}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, Search, ShoppingCart, User, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import logo from "@/assets/logo_paguemenos.png.webp";
 import { useCart } from "@/context/CartContext";
 import CartDrawer from "@/components/CartDrawer";
 
-const Header: React.FC = () => {
+function Header() {
   const [open, setOpen] = useState<boolean>(false);
   const [region, setRegion] = useState<string | null>(null);
   const [cep, setCep] = useState<string>("");
@@ -80,6 +80,15 @@ const Header: React.FC = () => {
 
   return (
     <>
+      <div className="bg-card border-b border-border">
+        <div className="container mx-auto px-4 py-2">
+          <div className="promo-marquee rounded-full bg-primary text-primary-foreground px-4 py-1 text-xs md:text-sm font-semibold uppercase tracking-wide">
+            <span className="promo-marquee__inner">
+              produtos promocionais com frete gratis ate o fim de dezembro | aproveite e garanta suas ofertas agora mesmo | produtos promocionais com frete gratis ate o fim de dezembro
+            </span>
+          </div>
+        </div>
+      </div>
       <header className="sticky top-0 z-50 bg-card border-b border-border shadow-sm site-header">
         <div className="container mx-auto px-4">
           <Dialog open={openCepDialog} onOpenChange={(v) => setOpenCepDialog(v)}>
@@ -189,7 +198,8 @@ const Header: React.FC = () => {
             {/* tabs removed per request */}
           </div>
 
-  
+
+
           {/* Dialog content (shared) */}
           <DialogContent>
             <DialogHeader>
@@ -236,6 +246,6 @@ const Header: React.FC = () => {
       <CartDrawer open={isCartOpen} onOpenChange={setCartOpenState} />
     </>
   );
-};
+}
 
 export default Header;
