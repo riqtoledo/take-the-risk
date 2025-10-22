@@ -19,32 +19,9 @@ const BASE_URL = resolveBaseUrl();
 const isPhpProxy = BASE_URL.endsWith(".php");
 const PIX_TIMEOUT_MS = 45_000;
 
-const baseHeaders: Record<string, string> = {
+const defaultHeaders: Record<string, string> = {
   "Content-Type": "application/json",
   Accept: "application/json",
-};
-
-const resolveAuthHeader = () => {
-  if (isPhpProxy) {
-    return undefined;
-  }
-
-  const rawKey = import.meta.env.VITE_PIX_API_KEY as string | undefined;
-  if (!rawKey) return undefined;
-
-  const trimmed = rawKey.trim();
-  if (!trimmed) return undefined;
-
-  return `Bearer ${trimmed}`;
-};
-
-const defaultHeaders = () => {
-  const headers = { ...baseHeaders };
-  const auth = resolveAuthHeader();
-  if (auth) {
-    headers.Authorization = auth;
-  }
-  return headers;
 };
 
 type PixGatewayError = {
@@ -89,7 +66,7 @@ const executeRequest = async <T>(config: AxiosRequestConfig): Promise<T> => {
     const response = await axios.request<T>({
       timeout: PIX_TIMEOUT_MS,
       headers: {
-        ...defaultHeaders(),
+        ...defaultHeaders,
         ...(config.headers ?? {}),
       },
       ...config,

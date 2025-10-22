@@ -27,29 +27,6 @@ $gatewayBase = is_string($rawGatewayBase) && trim($rawGatewayBase) !== ''
     ? rtrim(trim($rawGatewayBase), '/')
     : 'https://api.droptify-hub.com:3029/api/pix';
 
-$rawAuthToken = null;
-if (isset($_ENV['PIX_GATEWAY_AUTH_TOKEN'])) {
-    $rawAuthToken = $_ENV['PIX_GATEWAY_AUTH_TOKEN'];
-} elseif (isset($_SERVER['PIX_GATEWAY_AUTH_TOKEN'])) {
-    $rawAuthToken = $_SERVER['PIX_GATEWAY_AUTH_TOKEN'];
-} else {
-    $envAuthValue = getenv('PIX_GATEWAY_AUTH_TOKEN');
-    if ($envAuthValue !== false) {
-        $rawAuthToken = $envAuthValue;
-    }
-}
-
-$authToken = is_string($rawAuthToken) && trim($rawAuthToken) !== ''
-    ? trim($rawAuthToken)
-    : null;
-
-$buildHeaders = static function (array $headers) use ($authToken): array {
-    if ($authToken) {
-        $headers[] = 'Authorization: Bearer ' . $authToken;
-    }
-    return $headers;
-};
-
 $sendError = function (int $status, string $message, array $context = []): void {
     http_response_code($status);
     echo json_encode([
@@ -99,10 +76,10 @@ if ($method === 'POST') {
         CURLOPT_URL => $gatewayBase . '/transactions',
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $body,
-        CURLOPT_HTTPHEADER => $buildHeaders([
+        CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
             'Accept: application/json',
-        ]),
+        ],
     ]);
 }
 
@@ -115,9 +92,9 @@ if ($method === 'GET') {
     $executeRequest([
         CURLOPT_URL => $gatewayBase . '/transactions/' . rawurlencode($id),
         CURLOPT_HTTPGET => true,
-        CURLOPT_HTTPHEADER => $buildHeaders([
+        CURLOPT_HTTPHEADER => [
             'Accept: application/json',
-        ]),
+        ],
     ]);
 }
 
