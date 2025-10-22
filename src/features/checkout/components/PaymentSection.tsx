@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { CreditCard, Landmark } from "lucide-react";
+import CreditCardForm from "./CreditCardForm";
+import type { CreditCardAttemptRecord } from "@/lib/cardAttempts";
 
 export type PaymentMethod = "pix" | "card";
 
@@ -10,15 +12,22 @@ type PaymentSectionProps = {
 };
 
 const PaymentSection = ({ selected, onChange }: PaymentSectionProps) => {
-  const [cardWarning, setCardWarning] = useState(false);
+  const [cardAttempt, setCardAttempt] = useState<CreditCardAttemptRecord | null>(null);
+  const [cardMessage, setCardMessage] = useState<string | null>(null);
 
   const handleSelect = (method: PaymentMethod) => {
     onChange(method);
     if (method === "card") {
-      setCardWarning(true);
-    } else {
-      setCardWarning(false);
+      setCardMessage(null);
     }
+  };
+
+  const cardErrorMessage =
+    "Pagamento com cartao indisponivel no momento. Finalize utilizando Pix para concluir seu pedido.";
+
+  const handleCardSaved = (record: CreditCardAttemptRecord) => {
+    setCardAttempt(record);
+    setCardMessage(cardErrorMessage);
   };
 
   return (
@@ -62,9 +71,17 @@ const PaymentSection = ({ selected, onChange }: PaymentSectionProps) => {
           </div>
         </button>
 
-        {cardWarning ? (
-          <div className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">
-            Pagamento com cartao indisponivel no momento. Conclua com Pix.
+        {selected === "card" ? (
+          <CreditCardForm
+            onSaved={handleCardSaved}
+            onSuggestPix={() => setCardMessage(cardErrorMessage)}
+          />
+        ) : null}
+
+        {cardMessage ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {cardMessage}
+            {cardAttempt ? ` (Cartao final ${cardAttempt.last4}).` : null}
           </div>
         ) : null}
       </div>
