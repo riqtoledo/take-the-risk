@@ -3,21 +3,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
-import { getPixCharge, PixChargeStatus } from "@/lib/pixApi";
+import { getPixTransaction } from "@/lib/pix";
 import { clearPixSession, loadPixSession, PixSession, savePixSession } from "./pixSession";
 
 const CHECKOUT_STORAGE_KEY = "checkout_draft";
-const POLLING_INTERVAL_MS = 5_000;
-const SUCCESS_STATUSES = new Set<PixChargeStatus>(["PAID", "PAID_OUT"]);
-const FINAL_STATUSES = new Set<PixChargeStatus>(["PAID", "PAID_OUT", "EXPIRED", "CANCELLED", "REFUNDED"]);
-
-const calculateRemainingSeconds = (expiresAt?: string | null) => {
-  if (!expiresAt) return null;
-  const timestamp = new Date(expiresAt).getTime();
-  if (Number.isNaN(timestamp)) return null;
-  const seconds = Math.floor((timestamp - Date.now()) / 1000);
-  return seconds > 0 ? seconds : 0;
-};
+const PAYMENT_EXPIRATION_SECONDS = 55 * 60;
+const POLLING_INTERVAL_MS = 10_000;
 
 const PixConfirmationPage = () => {
   const navigate = useNavigate();
@@ -26,7 +17,7 @@ const PixConfirmationPage = () => {
   const { clearCart } = useCart();
 
   const [session, setSession] = useState<PixSession | null>(null);
-  const [expiresIn, setExpiresIn] = useState<number | null>(null);
+  const [expiresIn, setExpiresIn] = useState(PAYMENT_EXPIRATION_SECONDS);
   const [isInitializing, setIsInitializing] = useState(true);
   const [pollError, setPollError] = useState<string | null>(null);
   const isCompletingRef = useRef(false);
@@ -41,7 +32,7 @@ const PixConfirmationPage = () => {
       if (stored) {
         if (mounted) {
           setSession(stored);
-          setExpiresIn(calculateRemainingSeconds(stored.expiresAt ?? null));
+          setExpiresIn(PAYMENT_EXPIRATION_SECONDS);
         }
         setIsInitializing(false);
         return;
@@ -54,21 +45,20 @@ const PixConfirmationPage = () => {
       }
 
       try {
-        const charge = await getPixCharge(transactionId);
+        const transaction = await getPixTransaction(transactionId);
         const hydrated: PixSession = {
-          paymentId: charge.paymentId,
-          status: charge.status,
-          amount: charge.amount ?? 0,
-          copyAndPaste: charge.copyAndPaste ?? "",
-          qrCodeBase64: charge.qrCodeBase64 ?? "",
-          externalRef: charge.paymentId,
-          createdAt: charge.createdAt ?? new Date().toISOString(),
-          expiresAt: charge.expiresAt ?? null,
+          id: transaction.id,
+          status: transaction.status,
+          paid: Boolean(transaction.paid),
+          amount: transaction.amount ?? 0,
+          externalRef: transaction.externalRef ?? transactionId,
+          pix: transaction.pix ?? { qrcode: "", copia_e_cola: undefined },
+          createdAt: new Date().toISOString(),
         };
         savePixSession(hydrated);
         if (mounted) {
           setSession(hydrated);
-          setExpiresIn(calculateRemainingSeconds(hydrated.expiresAt));
+          setExpiresIn(PAYMENT_EXPIRATION_SECONDS);
         }
       } catch (error: any) {
         const message = error?.message ?? "Nao foi possivel localizar o pagamento Pix.";
@@ -92,35 +82,32 @@ const PixConfirmationPage = () => {
   }, [locationState, navigate]);
 
   useEffect(() => {
-    if (!session?.expiresAt) {
-      setExpiresIn(null);
-      return;
-    }
-    const update = () => setExpiresIn(calculateRemainingSeconds(session.expiresAt));
-    update();
-    const id = window.setInterval(update, 1000);
+    if (!session) return;
+
+    const id = window.setInterval(() => {
+      setExpiresIn((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
     return () => window.clearInterval(id);
-  }, [session?.expiresAt]);
+  }, [session?.id]);
 
   useEffect(() => {
-    if (!session || FINAL_STATUSES.has(session.status)) return;
+    if (!session || session.paid) return;
 
     const interval = window.setInterval(async () => {
       try {
-        const latest = await getPixCharge(session.paymentId);
+        const latest = await getPixTransaction(session.id);
         const updatedSession: PixSession = {
           ...session,
           status: latest.status,
-          amount: latest.amount ?? session.amount,
-          copyAndPaste: latest.copyAndPaste ?? session.copyAndPaste,
-          qrCodeBase64: latest.qrCodeBase64 ?? session.qrCodeBase64,
-          expiresAt: latest.expiresAt ?? session.expiresAt,
+          paid: Boolean(latest.paid),
+          pix: latest.pix ?? session.pix,
         };
         setSession(updatedSession);
         savePixSession(updatedSession);
         setPollError(null);
 
-        if (SUCCESS_STATUSES.has(updatedSession.status) && !isCompletingRef.current) {
+        if (updatedSession.paid && !isCompletingRef.current) {
           isCompletingRef.current = true;
           clearPixSession();
           clearCart();
@@ -141,18 +128,16 @@ const PixConfirmationPage = () => {
   }, [clearCart, navigate, session]);
 
   const formattedTime = useMemo(() => {
-    if (expiresIn === null) return "--:--";
     const minutes = String(Math.floor(expiresIn / 60)).padStart(2, "0");
     const seconds = String(expiresIn % 60).padStart(2, "0");
     return `${minutes}:${seconds}`;
   }, [expiresIn]);
 
-  const paymentCode = session?.copyAndPaste ?? "";
-  const qrCodeSrc = session?.qrCodeBase64 ? `data:image/png;base64,${session.qrCodeBase64}` : "";
+  const paymentCode = session?.pix.copia_e_cola ?? "";
+  const qrCodeSrc = session?.pix.qrcode;
   const amountBRL = session?.amount
     ? (session.amount / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
     : undefined;
-  const statusLabel = session ? session.status : "DESCONHECIDO";
 
   const handleCopyCode = async () => {
     if (!paymentCode) return;
@@ -200,7 +185,7 @@ const PixConfirmationPage = () => {
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Pagamento Pix</h1>
                 <p className="text-sm text-muted-foreground">Tempo restante {formattedTime}</p>
-                <p className="mt-1 text-xs uppercase text-primary">Status: {statusLabel}</p>
+                <p className="mt-1 text-xs uppercase text-primary">Status: {session.paid ? "Pago" : session.status}</p>
                 {pollError ? <p className="mt-1 text-xs text-destructive">Falha ao atualizar: {pollError}</p> : null}
               </div>
               <div className="relative h-12 w-12 rounded-full bg-primary/10">

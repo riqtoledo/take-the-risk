@@ -1,13 +1,15 @@
 export type PixSession = {
-  paymentId: string;
+  id: string;
   status: string;
+  paid: boolean;
   amount: number;
-  copyAndPaste: string;
-  qrCodeBase64: string;
   externalRef: string;
+  pix: {
+    qrcode: string;
+    copia_e_cola?: string;
+  };
   snapshot?: unknown;
   createdAt: string;
-  expiresAt?: string | null;
 };
 
 const PIX_SESSION_STORAGE_KEY = "pix_transaction_session";
