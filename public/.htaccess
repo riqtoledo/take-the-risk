@@ -9,6 +9,11 @@ AddDefaultCharset utf-8
   RewriteEngine On
   RewriteBase /
 
+  # Force HTTPS for all requests (fallbacks to HTTP_X_FORWARDED_PROTO when behind proxies)
+  RewriteCond %{HTTPS} !=on [OR]
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
   # Serve files that exist (hashed assets, static media, etc.)
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
