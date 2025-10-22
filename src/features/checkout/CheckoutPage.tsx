@@ -5,12 +5,14 @@ import Footer from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
 import PersonalInfoSection, { PersonalInfo } from "./components/PersonalInfoSection";
 import DeliverySection, { DeliveryMode, DeliveryAddressDetails } from "./components/DeliverySection";
-import PaymentSection, { PaymentMethod } from "./components/PaymentSection";
+import PaymentSection from "./components/PaymentSection";
 import OrderSummary from "./components/OrderSummary";
 import CheckoutSummaryBar from "./components/CheckoutSummaryBar";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   calculateShippingEstimate,
   cleanCep,
@@ -20,9 +22,7 @@ import {
   ShippingEstimate,
   ViaCepResult,
 } from "@/lib/shipping";
-import { createPixTransaction } from "@/lib/pix";
-import { savePixSession } from "./pixSession";
-
+import { criarPix, consultarPix } from "@/lib/pix-flow";
 const STORAGE_KEY = "checkout_draft";
 
 const defaultAddressDetails: DeliveryAddressDetails = {
@@ -47,8 +47,6 @@ const CheckoutPage = () => {
   });
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("delivery");
   const [cep, setCep] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
-
   const [isCalculatingCep, setIsCalculatingCep] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
   const [address, setAddress] = useState<ViaCepResult | null>(null);
@@ -56,6 +54,10 @@ const CheckoutPage = () => {
   const [addressDetails, setAddressDetails] = useState<DeliveryAddressDetails>(defaultAddressDetails);
   const [addressConfirmed, setAddressConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pixModalOpen, setPixModalOpen] = useState(false);
+  const [pixError, setPixError] = useState<string | null>(null);
+  const [pixResult, setPixResult] = useState<Awaited<ReturnType<typeof criarPix>> | null>(null);
+  const pixPollingRef = useRef<number | null>(null);
   const shippingRequestRef = useRef<AbortController | null>(null);
   // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
 
@@ -90,6 +92,10 @@ const CheckoutPage = () => {
       if (shippingRequestRef.current) {
         shippingRequestRef.current.abort();
         shippingRequestRef.current = null;
+      }
+      if (pixPollingRef.current) {
+        window.clearInterval(pixPollingRef.current);
+        pixPollingRef.current = null;
       }
     };
   }, []);
@@ -220,18 +226,52 @@ const CheckoutPage = () => {
   const hasNumber = addressDetails.number.trim().length > 0;
   const isAddressComplete = hasValidCep && hasAddressInfo && hasNumber;
   const canSubmitDelivery = !requiresAddress || (addressConfirmed && isAddressComplete);
-  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery && paymentMethod === "pix";
+  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery;
+
+  const stopPixPolling = () => {
+    if (pixPollingRef.current) {
+      window.clearInterval(pixPollingRef.current);
+      pixPollingRef.current = null;
+    }
+  };
+
+  const handlePixModalClose = () => {
+    setPixModalOpen(false);
+    stopPixPolling();
+  };
+
+  const startPixPolling = (transactionId: string) => {
+    stopPixPolling();
+    pixPollingRef.current = window.setInterval(async () => {
+      try {
+        const status = await consultarPix(transactionId);
+        setPixResult((prev) => ({
+          ...prev,
+          ...status,
+          pix: status.pix ?? prev?.pix,
+        }));
+        if (status.paid) {
+          stopPixPolling();
+          toast({
+            title: "Pagamento confirmado!",
+            description: "Obrigado pela sua compra. Voce recebera a confirmacao em seu e-mail.",
+          });
+        }
+        setPixError(null);
+      } catch (error: any) {
+        const message =
+          (error?.response?.data?.message as string | undefined) ??
+          error?.message ??
+          "Nao foi possivel atualizar o status do PIX.";
+        setPixError(message);
+      }
+    }, 5000);
+  };
 
   const handleFinishOrder = async () => {
     if (!isFormValid || isSubmitting) return;
     setIsSubmitting(true);
     const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
-    const cleanedPhone = cleanedPhoneDigits;
-
-    const orderTotal = total;
-    const amountInCents = Math.max(Math.round(orderTotal * 100), 0);
-    const externalRef = `PED-${Date.now()}`;
-    const description = `Pedido ${externalRef}`;
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(checkoutSnapshot));
@@ -240,31 +280,41 @@ const CheckoutPage = () => {
     }
 
     try {
-      const transaction = await createPixTransaction({
+      const amountInCents = Math.max(Math.round(total * 100), 0);
+      const externalRef = `PED-${Date.now()}`;
+      const payload = {
         name: personalInfo.name.trim(),
         email: personalInfo.email.trim(),
-        phone: cleanedPhone,
+        phone: cleanedPhoneDigits,
         amount: amountInCents,
-        description,
+        description: `Pedido ${externalRef}`,
         externalRef,
-      });
-
-      const pixSession = {
-        id: transaction.id,
-        status: transaction.status,
-        paid: transaction.paid ?? false,
-        amount: transaction.amount ?? amountInCents,
-        externalRef,
-        pix: transaction.pix,
-        snapshot: checkoutSnapshot,
-        createdAt: new Date().toISOString(),
       };
 
-      savePixSession(pixSession);
+      const result = await criarPix(payload);
+      const transactionId = (result as any).id ?? (result as any).paymentId;
 
-      navigate("/checkout/pix", { state: { transactionId: transaction.id } });
+      if (!transactionId) {
+        throw new Error("Transacao PIX retornou dados inesperados.");
+      }
+
+      setPixResult(result);
+      setPixError(null);
+      setPixModalOpen(true);
+
+      if (!result.paid) {
+        startPixPolling(transactionId);
+      } else {
+        toast({
+          title: "Pagamento confirmado!",
+          description: "Obrigado pela sua compra.",
+        });
+      }
     } catch (error: any) {
-      const message = error?.message ?? "Nao foi possivel gerar o pagamento Pix. Tente novamente.";
+      const message =
+        (error?.response?.data?.message as string | undefined) ??
+        error?.message ??
+        "Nao foi possivel gerar o pagamento Pix. Tente novamente.";
       toast({
         title: "Erro ao gerar PIX",
         description: message,
@@ -272,6 +322,31 @@ const CheckoutPage = () => {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const pixCopyCode = pixResult?.pix?.copia_e_cola ?? "";
+  const pixQrSrc = pixResult?.pix?.qrcode ?? "";
+  const pixStatusLabel = pixResult
+    ? pixResult.paid
+      ? "✅ Pago"
+      : `⏳ ${pixResult.status ?? "Pendente"}`
+    : "Aguardando pagamento";
+
+  const handleCopyPixCode = async () => {
+    if (!pixCopyCode) return;
+    try {
+      await navigator.clipboard.writeText(pixCopyCode);
+      toast({
+        title: "Codigo copiado!",
+        description: "Cole o codigo no app do seu banco para concluir o pagamento.",
+      });
+    } catch {
+      toast({
+        title: "Nao foi possivel copiar",
+        description: "Copie manualmente o codigo exibido.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -325,10 +400,7 @@ const CheckoutPage = () => {
                   </span>
                 </div>
               </section>
-              <PaymentSection selected={paymentMethod} onChange={setPaymentMethod} />
-              <div className="rounded-xl border border-border bg-primary/10 p-4 text-sm font-semibold text-primary">
-                Finalize com Pix para confirmar seu pedido imediatamente.
-              </div>
+              <PaymentSection />
               <button
                 type="button"
                 className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -340,10 +412,10 @@ const CheckoutPage = () => {
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Gerando PIX...
+                    Finalizando pedido...
                   </span>
                 ) : (
-                  "Finalizar compra"
+                  "Enviar pedido"
                 )}
               </button>
             </div>
@@ -366,6 +438,62 @@ const CheckoutPage = () => {
           }}
         />
       ) : null}
+
+      <Dialog
+        open={pixModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handlePixModalClose();
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Pagamento Pix</DialogTitle>
+            <DialogDescription>
+              Escaneie o QR Code ou copie o codigo para concluir o pagamento.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pixError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {pixError}
+            </div>
+          ) : null}
+
+          <div className="grid gap-4">
+            <div className="text-sm font-semibold text-foreground">
+              Status: <span className="font-normal">{pixStatusLabel}</span>
+            </div>
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4">
+              {pixQrSrc ? (
+                <img
+                  src={pixQrSrc}
+                  alt="QR Code para pagamento Pix"
+                  className="h-44 w-44 rounded-md border border-border bg-background p-2"
+                />
+              ) : (
+                <div className="flex h-44 w-44 items-center justify-center rounded-md border border-border bg-muted text-sm text-muted-foreground">
+                  QR Code indisponivel
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Escaneie com o app do seu banco para finalizar o pagamento.</p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-semibold text-foreground">Codigo copia e cola</p>
+              <textarea
+                className="mt-2 h-28 w-full resize-none rounded-md border border-border bg-background p-3 text-sm font-mono"
+                readOnly
+                value={pixCopyCode || "Codigo nao disponivel"}
+              />
+              <Button className="mt-3 w-full" onClick={handleCopyPixCode} disabled={!pixCopyCode}>
+                Copiar codigo
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

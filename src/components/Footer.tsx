@@ -66,7 +66,7 @@ const SECTIONS: FooterSection[] = [
   {
     title: "Formas de Pagamento",
     type: "payments",
-    payments: ["Visa", "Mastercard", "Elo", "Hipercard", "American Express", "Pix", "Boleto"],
+    payments: ["Visa", "Mastercard", "Elo", "Hipercard", "American Express", "Boleto"],
   },
   {
     title: "Nossos Selos",
