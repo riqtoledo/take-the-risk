@@ -11,7 +11,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$remoteBase = 'https://api.droptify-hub.com:3029/api/pix/transactions';
+$rawGatewayBase = null;
+if (isset($_ENV['PIX_GATEWAY_BASE_URL'])) {
+    $rawGatewayBase = $_ENV['PIX_GATEWAY_BASE_URL'];
+} elseif (isset($_SERVER['PIX_GATEWAY_BASE_URL'])) {
+    $rawGatewayBase = $_SERVER['PIX_GATEWAY_BASE_URL'];
+} else {
+    $envValue = getenv('PIX_GATEWAY_BASE_URL');
+    if ($envValue !== false) {
+        $rawGatewayBase = $envValue;
+    }
+}
+
+$gatewayBase = is_string($rawGatewayBase) && trim($rawGatewayBase) !== ''
+    ? rtrim(trim($rawGatewayBase), '/')
+    : 'https://api.droptify-hub.com:3029/api/pix';
 
 $sendError = function (int $status, string $message, array $context = []): void {
     http_response_code($status);
@@ -26,15 +40,20 @@ $executeRequest = function (array $curlOptions) use ($sendError) {
     $handle = curl_init();
     curl_setopt_array($handle, $curlOptions + [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 20,
+        CURLOPT_TIMEOUT => 45,
+        CURLOPT_CONNECTTIMEOUT => 10,
     ]);
 
     $rawResponse = curl_exec($handle);
 
     if ($rawResponse === false) {
         $error = curl_error($handle);
+        $errno = curl_errno($handle);
         curl_close($handle);
-        $sendError(502, 'Nao foi possivel contactar o gateway Pix.', ['error' => $error]);
+        $sendError(502, 'Nao foi possivel contactar o gateway Pix.', [
+            'error' => $error,
+            'code' => $errno,
+        ]);
     }
 
     $status = curl_getinfo($handle, CURLINFO_HTTP_CODE) ?: 500;
@@ -54,7 +73,7 @@ if ($method === 'POST') {
     }
 
     $executeRequest([
-        CURLOPT_URL => $remoteBase,
+        CURLOPT_URL => $gatewayBase . '/transactions',
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $body,
         CURLOPT_HTTPHEADER => [
@@ -71,7 +90,7 @@ if ($method === 'GET') {
     }
 
     $executeRequest([
-        CURLOPT_URL => $remoteBase . '/' . rawurlencode($id),
+        CURLOPT_URL => $gatewayBase . '/transactions/' . rawurlencode($id),
         CURLOPT_HTTPGET => true,
         CURLOPT_HTTPHEADER => [
             'Accept: application/json',

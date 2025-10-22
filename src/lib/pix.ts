@@ -1,3 +1,5 @@
+import axios, { AxiosRequestConfig } from "axios";
+
 const sanitizeBase = (value: string) => value.trim().replace(/\/+$/, "");
 
 const resolveBaseUrl = () => {
@@ -15,6 +17,65 @@ const resolveBaseUrl = () => {
 
 const BASE_URL = resolveBaseUrl();
 const isPhpProxy = BASE_URL.endsWith(".php");
+const PIX_TIMEOUT_MS = 45_000;
+
+const defaultHeaders: Record<string, string> = {
+  "Content-Type": "application/json",
+  Accept: "application/json",
+};
+
+type PixGatewayError = {
+  message?: string;
+  context?: unknown;
+};
+
+const buildErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError<PixGatewayError>(error)) {
+    if (error.code === "ECONNABORTED") {
+      return "Tempo excedido ao contactar o gateway Pix.";
+    }
+
+    const data = error.response?.data;
+    if (data && typeof data === "object" && "message" in data && data.message) {
+      let message = String(data.message);
+      if ("context" in data && data.context) {
+        try {
+          const contextString = JSON.stringify(data.context);
+          if (contextString && contextString !== "{}") {
+            message = `${message} (${contextString})`;
+          }
+        } catch {
+          // ignore serialization issues
+        }
+      }
+      return message;
+    }
+
+    return error.response?.statusText || error.message || "Falha ao contactar o gateway Pix.";
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Falha ao contactar o gateway Pix.";
+};
+
+const executeRequest = async <T>(config: AxiosRequestConfig): Promise<T> => {
+  try {
+    const response = await axios.request<T>({
+      timeout: PIX_TIMEOUT_MS,
+      headers: {
+        ...defaultHeaders,
+        ...(config.headers ?? {}),
+      },
+      ...config,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(buildErrorMessage(error));
+  }
+};
 
 export type PixTransactionRequest = {
   name: string;
@@ -40,53 +101,24 @@ export type PixTransactionResponse = {
   pix: PixInfo;
 };
 
-const defaultHeaders: HeadersInit = {
-  "Content-Type": "application/json",
-  Accept: "application/json",
-};
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  const text = await response.text();
-  const rawBody = text ? JSON.parse(text) : undefined;
-
-  if (!response.ok) {
-    let message = response.statusText;
-    if (rawBody && typeof rawBody === "object" && "message" in rawBody) {
-      message = String((rawBody as { message: string }).message);
-      if ("context" in rawBody && rawBody.context) {
-        try {
-          const contextString = JSON.stringify(rawBody.context);
-          if (contextString && contextString !== "{}") {
-            message = `${message} (${contextString})`;
-          }
-        } catch {
-          // ignore serialization issues
-        }
-      }
-    }
-    throw new Error(message);
-  }
-
-  return rawBody as T;
-}
-
 export async function createPixTransaction(payload: PixTransactionRequest): Promise<PixTransactionResponse> {
-  const endpoint = isPhpProxy ? BASE_URL : `${BASE_URL}/transactions`;
-  const response = await fetch(endpoint, {
+  const url = isPhpProxy ? BASE_URL : `${BASE_URL}/transactions`;
+  return executeRequest<PixTransactionResponse>({
+    url,
     method: "POST",
-    headers: defaultHeaders,
-    body: JSON.stringify(payload),
+    data: payload,
   });
-
-  return handleResponse<PixTransactionResponse>(response);
 }
 
 export async function getPixTransaction(id: string): Promise<PixTransactionResponse> {
-  const url = isPhpProxy ? `${BASE_URL}?id=${encodeURIComponent(id)}` : `${BASE_URL}/transactions/${encodeURIComponent(id)}`;
-  const response = await fetch(url, {
+  const url = isPhpProxy ? BASE_URL : `${BASE_URL}/transactions/${encodeURIComponent(id)}`;
+  return executeRequest<PixTransactionResponse>({
+    url,
     method: "GET",
-    headers: defaultHeaders,
+    params: isPhpProxy
+      ? {
+          id,
+        }
+      : undefined,
   });
-
-  return handleResponse<PixTransactionResponse>(response);
 }
