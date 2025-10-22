@@ -20,7 +20,7 @@ import {
   ShippingEstimate,
   ViaCepResult,
 } from "@/lib/shipping";
-import { createPixTransaction } from "@/lib/pix";
+import { createPixCharge } from "@/lib/pixApi";
 import { savePixSession } from "./pixSession";
 
 const STORAGE_KEY = "checkout_draft";
@@ -230,8 +230,8 @@ const CheckoutPage = () => {
 
     const orderTotal = total;
     const amountInCents = Math.max(Math.round(orderTotal * 100), 0);
-    const externalRef = `PED-${Date.now()}`;
-    const description = `Pedido ${externalRef}`;
+      const externalRef = `PED-${Date.now()}`;
+      const description = `Pedido ${externalRef}`;
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(checkoutSnapshot));
@@ -240,29 +240,37 @@ const CheckoutPage = () => {
     }
 
     try {
-      const transaction = await createPixTransaction({
-        name: personalInfo.name.trim(),
-        email: personalInfo.email.trim(),
-        phone: cleanedPhone,
-        amount: amountInCents,
-        description,
-        externalRef,
-      });
+        const charge = await createPixCharge({
+          orderId: externalRef,
+          amount: amountInCents,
+          description,
+          payer: {
+            name: personalInfo.name.trim() || undefined,
+            email: personalInfo.email.trim() || undefined,
+            phone: cleanedPhone || undefined,
+          },
+          metadata: {
+            items,
+            subtotal,
+            shippingCost,
+          },
+        });
 
-      const pixSession = {
-        id: transaction.id,
-        status: transaction.status,
-        paid: transaction.paid ?? false,
-        amount: transaction.amount ?? amountInCents,
-        externalRef,
-        pix: transaction.pix,
-        snapshot: checkoutSnapshot,
-        createdAt: new Date().toISOString(),
-      };
+        const pixSession = {
+          paymentId: charge.paymentId,
+          status: charge.status,
+          amount: charge.amount ?? amountInCents,
+          copyAndPaste: charge.copyAndPaste,
+          qrCodeBase64: charge.qrCodeBase64,
+          externalRef,
+          snapshot: checkoutSnapshot,
+          createdAt: charge.createdAt ?? new Date().toISOString(),
+          expiresAt: charge.expiresAt ?? null,
+        };
 
-      savePixSession(pixSession);
+        savePixSession(pixSession);
 
-      navigate("/checkout/pix", { state: { transactionId: transaction.id } });
+        navigate("/checkout/pix", { state: { transactionId: charge.paymentId } });
     } catch (error: any) {
       const message = error?.message ?? "Nao foi possivel gerar o pagamento Pix. Tente novamente.";
       toast({
