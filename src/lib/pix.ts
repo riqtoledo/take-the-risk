@@ -1,4 +1,20 @@
-const PIX_API_BASE_URL = "https://api.droptify-hub.com:3029";
+const sanitizeBase = (value: string) => value.trim().replace(/\/+$/, "");
+
+const resolveBaseUrl = () => {
+  const envValue = import.meta.env.VITE_PIX_API_BASE_URL as string | undefined;
+  if (envValue && envValue.trim().length > 0) {
+    return sanitizeBase(envValue);
+  }
+
+  if (import.meta.env.PROD) {
+    return "/api/pix-proxy.php";
+  }
+
+  return "https://api.droptify-hub.com:3029/api/pix";
+};
+
+const BASE_URL = resolveBaseUrl();
+const isPhpProxy = BASE_URL.endsWith(".php");
 
 export type PixTransactionRequest = {
   name: string;
@@ -31,20 +47,32 @@ const defaultHeaders: HeadersInit = {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
-  const body = text ? (JSON.parse(text) as T) : (undefined as unknown as T);
+  const rawBody = text ? JSON.parse(text) : undefined;
 
   if (!response.ok) {
-    const error = body ?? { message: response.statusText };
-    throw new Error(
-      typeof error === "object" && error !== null && "message" in error ? String((error as { message: string }).message) : response.statusText,
-    );
+    let message = response.statusText;
+    if (rawBody && typeof rawBody === "object" && "message" in rawBody) {
+      message = String((rawBody as { message: string }).message);
+      if ("context" in rawBody && rawBody.context) {
+        try {
+          const contextString = JSON.stringify(rawBody.context);
+          if (contextString && contextString !== "{}") {
+            message = `${message} (${contextString})`;
+          }
+        } catch {
+          // ignore serialization issues
+        }
+      }
+    }
+    throw new Error(message);
   }
 
-  return body;
+  return rawBody as T;
 }
 
 export async function createPixTransaction(payload: PixTransactionRequest): Promise<PixTransactionResponse> {
-  const response = await fetch(`${PIX_API_BASE_URL}/api/pix/transactions`, {
+  const endpoint = isPhpProxy ? BASE_URL : `${BASE_URL}/transactions`;
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: defaultHeaders,
     body: JSON.stringify(payload),
@@ -54,7 +82,8 @@ export async function createPixTransaction(payload: PixTransactionRequest): Prom
 }
 
 export async function getPixTransaction(id: string): Promise<PixTransactionResponse> {
-  const response = await fetch(`${PIX_API_BASE_URL}/api/pix/transactions/${id}`, {
+  const url = isPhpProxy ? `${BASE_URL}?id=${encodeURIComponent(id)}` : `${BASE_URL}/transactions/${encodeURIComponent(id)}`;
+  const response = await fetch(url, {
     method: "GET",
     headers: defaultHeaders,
   });
