@@ -361,9 +361,6 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
         >
           {isSaving ? "Validando cartao..." : "Validar cartao"}
         </button>
-        <p className="text-xs text-muted-foreground">
-          Os dados sao enviados com seguranca e armazenados para analise interna.
-        </p>
       </div>
 
       {feedback ? (

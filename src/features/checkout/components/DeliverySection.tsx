@@ -68,7 +68,6 @@ const DeliverySection = ({
     <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-foreground">Entrega</h2>
-        <span className="text-xs font-medium uppercase text-primary">Editar</span>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
