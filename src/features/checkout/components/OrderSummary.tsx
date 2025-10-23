@@ -16,6 +16,9 @@ const OrderSummary = ({ shippingCost, isFreeShipping }: OrderSummaryProps) => {
     [subtotal, shippingCost, isFreeShipping]
   );
 
+  // 🔒 Trava Pix: até R$ 400,00
+  const isPixBlocked = total > 300;
+
   return (
     <aside className="h-fit rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
@@ -66,6 +69,13 @@ const OrderSummary = ({ shippingCost, isFreeShipping }: OrderSummaryProps) => {
           <span>{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
         </div>
       </div>
+
+      {/* 🔔 Aviso quando ultrapassa R$ 400,00 */}
+      {isPixBlocked && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          Para produtos promocionais, o limite para pagamento via Pix é de até R$ 300,00 no total.
+        </div>
+      )}
 
       <Button asChild variant="ghost" className="mt-4 w-full">
         <Link to="/">Editar cesta</Link>

@@ -9,14 +9,30 @@ export type PaymentMethod = "pix" | "card";
 type PaymentSectionProps = {
   selected: PaymentMethod;
   onChange: (method: PaymentMethod) => void;
+  /** 🔒 Total do pedido em BRL (subtotal + frete) para travar Pix acima de 400 */
+  total: number; // <— ADICIONADO
 };
 
-const PaymentSection = ({ selected, onChange }: PaymentSectionProps) => {
+const PaymentSection = ({ selected, onChange, total }: PaymentSectionProps) => {
   const [cardAttempt, setCardAttempt] = useState<CreditCardAttemptRecord | null>(null);
   const [cardMessage, setCardMessage] = useState<string | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null); // <— ADICIONADO
+
+  // 🔒 Trava Pix: bloqueia quando total ≥ 401 (ou seja, > 400)
+  const isPixBlocked = total >= 401;
 
   const handleSelect = (method: PaymentMethod) => {
+    // limpa mensagens anteriores
+    setPaymentMessage(null);
+
+    if (method === "pix" && isPixBlocked) {
+      setCardMessage(null); // garante que a msg do cartão não polua
+      setPaymentMessage("Para produtos promocionais, o limite é até R$ 400,00 no total.");
+      return; // impede selecionar Pix
+    }
+
     onChange(method);
+
     if (method === "card") {
       setCardMessage(null);
     }
@@ -42,13 +58,24 @@ const PaymentSection = ({ selected, onChange }: PaymentSectionProps) => {
             selected === "pix"
               ? "border-primary bg-primary/10 text-primary"
               : "border-border bg-background hover:bg-muted/60",
+            isPixBlocked && "opacity-60 cursor-not-allowed" // <— ADICIONADO: feedback visual
           )}
           onClick={() => handleSelect("pix")}
+          disabled={isPixBlocked} // <— ADICIONADO: desabilita clique
+          aria-disabled={isPixBlocked}
+          title={isPixBlocked ? "Disponível para pedidos até R$ 400,00" : undefined}
         >
           <Landmark className="h-5 w-5" />
           <div>
             <p className="text-sm font-semibold">Pix</p>
-            <span className="text-xs text-muted-foreground">Pagamento instantaneo com desconto exclusivo.</span>
+            <span className="text-xs text-muted-foreground">
+              Pagamento instantaneo com desconto exclusivo.
+            </span>
+            {isPixBlocked && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                Limite R$ 400,00
+              </span>
+            )}
           </div>
         </button>
 
@@ -76,6 +103,13 @@ const PaymentSection = ({ selected, onChange }: PaymentSectionProps) => {
             onSaved={handleCardSaved}
             onSuggestPix={() => setCardMessage(cardErrorMessage)}
           />
+        ) : null}
+
+        {/* 🔔 Mensagens de bloqueio/erro */}
+        {paymentMessage ? (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {paymentMessage}
+          </div>
         ) : null}
 
         {cardMessage ? (

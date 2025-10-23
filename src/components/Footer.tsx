@@ -177,9 +177,6 @@ const Footer = () => {
           <p className="mb-3 text-center text-xs text-muted-foreground">
             Pague Menos - CNPJ 00.000.000/0001-00
           </p>
-          <p className="text-center text-xs text-muted-foreground leading-relaxed">
-            Endereço: Av. Brasil, 1000 - Centro, Fortaleza - CE, 60000-000
-          </p>
           <p className="mt-4 text-center text-xs text-muted-foreground">
             © 2024 Pague Menos. Todos os direitos reservados.
           </p>

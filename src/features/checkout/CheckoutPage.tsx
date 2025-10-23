@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿﻿import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import Header from "@/components/Header";
 import Newsletter from "@/components/Newsletter";
@@ -25,7 +25,6 @@ import {
 } from "@/lib/shipping";
 import { formatCurrency } from "@/lib/utils";
 import { criarPix, consultarPix } from "@/lib/pix-flow";
-
 const STORAGE_KEY = "checkout_draft";
 type PixResponse = Awaited<ReturnType<typeof criarPix>>;
 
@@ -203,43 +202,27 @@ const normalizePixInfo = (
   for (const container of containers) {
     for (const key of PIX_QR_KEYS) {
       if (qrcode) break;
-      // @ts-ignore
       considerStringValue(container[key]);
     }
     for (const key of PIX_COPY_KEYS) {
       if (copiaECola) break;
-      // @ts-ignore
       considerStringValue(container[key]);
     }
-    // @ts-ignore
     if (!qrcode) {
-      // @ts-ignore
       considerStringValue(container.qrcode);
-      // @ts-ignore
       considerStringValue(container.qrCode);
-      // @ts-ignore
       considerStringValue(container.qrcodeUrl);
-      // @ts-ignore
       considerStringValue(container.qrCodeUrl);
-      // @ts-ignore
       considerStringValue(container.qrcodeURL);
     }
-    // @ts-ignore
     if (!copiaECola) {
-      // @ts-ignore
       considerStringValue(container.emv);
-      // @ts-ignore
       considerStringValue(container.brcode);
-      // @ts-ignore
       considerStringValue(container.payload);
-      // @ts-ignore
       considerStringValue(container.texto);
-      // @ts-ignore
       considerStringValue(container.text);
     }
-    // @ts-ignore
     if (!qrcode && typeof container === "object") {
-      // @ts-ignore
       const nested = container.pix;
       if (typeof nested === "string") {
         considerStringValue(nested);
@@ -433,6 +416,7 @@ const CheckoutPage = () => {
   const pixSuccessHandledRef = useRef(false);
   const pixDocumentNumberRef = useRef<string | null>(null);
   const shippingRequestRef = useRef<AbortController | null>(null);
+  // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
 
   useEffect(() => {
     try {
@@ -482,10 +466,14 @@ const CheckoutPage = () => {
     };
   }, []);
 
-  // ===== Frete grátis aplicado globalmente =====
-  const isFreeShipping = true;
-  const shippingCost = 0;
-  const total = subtotal;
+  const isFreeShipping = subtotal >= 50;
+  const shippingCost = useMemo(() => {
+    if (isFreeShipping) return 0;
+    return shippingEstimate?.price ?? 0;
+  }, [isFreeShipping, shippingEstimate]);
+
+  const total = useMemo(() => subtotal + (isFreeShipping ? 0 : shippingCost), [subtotal, shippingCost, isFreeShipping]);
+  const isPixBlocked = total >= 301;
 
   const handleCepChange = (value: string) => {
     setCep(formatCep(value));
@@ -628,12 +616,18 @@ const CheckoutPage = () => {
   const hasContactInfo =
     personalInfo.name.trim().length > 2 && personalInfo.email.includes("@") && cleanedPhoneDigits.length >= 10;
   const requiresAddress = deliveryMode === "delivery";
+  // QA: A validacao considera retirada sem exigir CEP/endereco, preservando o fluxo existente.
   const hasValidCep = cleanCep(cep).length === 8;
   const hasAddressInfo = addressDetails.street.trim().length > 0;
   const hasNumber = addressDetails.number.trim().length > 0;
   const isAddressComplete = hasValidCep && hasAddressInfo && hasNumber;
   const canSubmitDelivery = !requiresAddress || (addressConfirmed && isAddressComplete);
-  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery && paymentMethod === "pix";
+  const isFormValid =
+  items.length > 0 &&
+  hasContactInfo &&
+  canSubmitDelivery &&
+  paymentMethod === "pix" &&
+  !isPixBlocked;
 
   const clearPixSuccessRedirect = () => {
     if (pixSuccessRedirectRef.current) {
@@ -764,6 +758,17 @@ const CheckoutPage = () => {
   };
 
   const handleFinishOrder = async () => {
+
+    if (isPixBlocked) {
+    toast({
+      title: "Pix indisponível para este valor",
+      description: "Para produtos promocionais, o limite é até R$ 300,00 no total.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+
     if (!isFormValid || isSubmitting) return;
     clearPixSuccessRedirect();
     stopPixPolling();
@@ -888,7 +893,7 @@ const CheckoutPage = () => {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-  const pixStatus = (() => {
+const pixStatus = (() => {
     if (pixResult?.paid) {
       return { label: resolvePixDisplayLabel(pixResult.status, true), tone: "success" as const };
     }
@@ -984,7 +989,14 @@ const CheckoutPage = () => {
                   </span>
                 </div>
               </section>
-              <PaymentSection selected={paymentMethod} onChange={setPaymentMethod} />
+
+              {isPixBlocked && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  Para produtos promocionais, o limite para pagamento via Pix é de até <strong>R$ 300,00</strong> no total.
+                </div>
+              )}
+
+              <PaymentSection selected={paymentMethod} onChange={setPaymentMethod} total={total}/>
               <button
                 type="button"
                 className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
