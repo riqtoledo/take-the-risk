@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import Header from "@/components/Header";
 import Newsletter from "@/components/Newsletter";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/shipping";
 import { formatCurrency } from "@/lib/utils";
 import { criarPix, consultarPix } from "@/lib/pix-flow";
+
 const STORAGE_KEY = "checkout_draft";
 type PixResponse = Awaited<ReturnType<typeof criarPix>>;
 
@@ -202,27 +203,43 @@ const normalizePixInfo = (
   for (const container of containers) {
     for (const key of PIX_QR_KEYS) {
       if (qrcode) break;
+      // @ts-ignore
       considerStringValue(container[key]);
     }
     for (const key of PIX_COPY_KEYS) {
       if (copiaECola) break;
+      // @ts-ignore
       considerStringValue(container[key]);
     }
+    // @ts-ignore
     if (!qrcode) {
+      // @ts-ignore
       considerStringValue(container.qrcode);
+      // @ts-ignore
       considerStringValue(container.qrCode);
+      // @ts-ignore
       considerStringValue(container.qrcodeUrl);
+      // @ts-ignore
       considerStringValue(container.qrCodeUrl);
+      // @ts-ignore
       considerStringValue(container.qrcodeURL);
     }
+    // @ts-ignore
     if (!copiaECola) {
+      // @ts-ignore
       considerStringValue(container.emv);
+      // @ts-ignore
       considerStringValue(container.brcode);
+      // @ts-ignore
       considerStringValue(container.payload);
+      // @ts-ignore
       considerStringValue(container.texto);
+      // @ts-ignore
       considerStringValue(container.text);
     }
+    // @ts-ignore
     if (!qrcode && typeof container === "object") {
+      // @ts-ignore
       const nested = container.pix;
       if (typeof nested === "string") {
         considerStringValue(nested);
@@ -416,7 +433,6 @@ const CheckoutPage = () => {
   const pixSuccessHandledRef = useRef(false);
   const pixDocumentNumberRef = useRef<string | null>(null);
   const shippingRequestRef = useRef<AbortController | null>(null);
-  // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
 
   useEffect(() => {
     try {
@@ -466,13 +482,10 @@ const CheckoutPage = () => {
     };
   }, []);
 
-  const isFreeShipping = subtotal >= 50;
-  const shippingCost = useMemo(() => {
-    if (isFreeShipping) return 0;
-    return shippingEstimate?.price ?? 0;
-  }, [isFreeShipping, shippingEstimate]);
-
-  const total = useMemo(() => subtotal + (isFreeShipping ? 0 : shippingCost), [subtotal, shippingCost, isFreeShipping]);
+  // ===== Frete grátis aplicado globalmente =====
+  const isFreeShipping = true;
+  const shippingCost = 0;
+  const total = subtotal;
 
   const handleCepChange = (value: string) => {
     setCep(formatCep(value));
@@ -615,7 +628,6 @@ const CheckoutPage = () => {
   const hasContactInfo =
     personalInfo.name.trim().length > 2 && personalInfo.email.includes("@") && cleanedPhoneDigits.length >= 10;
   const requiresAddress = deliveryMode === "delivery";
-  // QA: A validacao considera retirada sem exigir CEP/endereco, preservando o fluxo existente.
   const hasValidCep = cleanCep(cep).length === 8;
   const hasAddressInfo = addressDetails.street.trim().length > 0;
   const hasNumber = addressDetails.number.trim().length > 0;
@@ -876,7 +888,7 @@ const CheckoutPage = () => {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-const pixStatus = (() => {
+  const pixStatus = (() => {
     if (pixResult?.paid) {
       return { label: resolvePixDisplayLabel(pixResult.status, true), tone: "success" as const };
     }
@@ -1098,5 +1110,3 @@ const pixStatus = (() => {
 };
 
 export default CheckoutPage;
-
-

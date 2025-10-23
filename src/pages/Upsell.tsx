@@ -30,7 +30,7 @@ type UpsellLocationState = {
 const UpsellPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clearCart, addToCart } = useCart();
+  const { clearCart, addToCart, items } = useCart();
 
   const state = (location.state ?? undefined) as UpsellLocationState | undefined;
 
@@ -41,21 +41,50 @@ const UpsellPage = () => {
   useEffect(() => {
     if (!state?.transactionId) {
       navigate("/", { replace: true });
+      return;
     }
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" as ScrollBehavior : "auto" });
   }, [state?.transactionId, navigate]);
+
+  const CART_STORAGE_KEY = "cart_snapshot_v1";
 
   const handleAddUpsellItem = (event: MouseEvent<HTMLButtonElement>, product: Product) => {
     event.preventDefault();
     addToCart(product, 1);
+
+    const updatedItems = (() => {
+      const snapshot = items.map((entry) => ({
+        product: entry.product,
+        quantity: entry.quantity,
+      }));
+      const existingIndex = snapshot.findIndex((entry) => entry.product.id === product.id);
+      if (existingIndex >= 0) {
+        snapshot[existingIndex] = {
+          ...snapshot[existingIndex],
+          quantity: snapshot[existingIndex].quantity + 1,
+        };
+      } else {
+        snapshot.push({ product, quantity: 1 });
+      }
+      return snapshot;
+    })();
+
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updatedItems));
+    } catch {
+      // ignore storage write errors – context will still hold the data
+    }
+
     toast({
       title: "Oferta adicionada ao carrinho",
       description: `${product.name} foi adicionado ao carrinho.`,
     });
+    navigate("/checkout");
   };
 
   const relatedProducts = useMemo(() => {
     if (!state?.items?.length) {
-      return getAllProducts().slice(0, 4);
+      return getAllProducts().slice(0, 6);
     }
 
     const seen = new Set<string>();
@@ -78,10 +107,10 @@ const UpsellPage = () => {
       const fallback = getAllProducts().filter(
         (product) => !state.items.some((entry) => entry.id === product.id),
       );
-      collected.push(...fallback.slice(0, 4));
+      collected.push(...fallback.slice(0, 6));
     }
 
-    return collected.slice(0, 4);
+    return collected.slice(0, 6);
   }, [state?.items]);
 
   if (!state?.transactionId) {
@@ -94,11 +123,11 @@ const UpsellPage = () => {
     <div className="min-h-screen bg-background text-foreground">
       <Header />
 
-      <main className="container mx-auto px-4 py-10 space-y-10">
+      <main className="container mx-auto px-4 py-8 space-y-8">
         <section className="mx-auto max-w-3xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <h1 className="text-2xl font-semibold text-foreground">Pagamento confirmado!</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Obrigado pela sua compra. Recebemos o pagamento do pedido{" "}
+            Obrigado pela sua compra. Recebemos o pagamento do pedido:{" "}
             <span className="font-semibold text-foreground">{state.transactionId}</span>.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -121,26 +150,22 @@ const UpsellPage = () => {
             </ul>
           </div>
 
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col items-center justify-center">
             <Button onClick={() => navigate("/")} className="w-full sm:w-auto">
               Voltar para a loja
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => navigate("/checkout")}
-            >
-              Ir para o checkout
             </Button>
           </div>
         </section>
 
-        <section className="space-y-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Talvez voce tambem goste</h2>
-              <p className="text-sm text-muted-foreground">
-                Selecionamos ofertas relacionadas ao seu pedido. Aproveite para complementar a sua compra!
+        <section className="space-y-6 rounded-2xl border border-border bg-accent/5 p-4 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <span className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary sm:text-sm">
+                Aproveite agora
+              </span>
+              <h2 className="text-xl font-semibold text-foreground sm:text-2xl">Talvez voce tambem goste!</h2>
+              <p className="text-sm text-muted-foreground sm:max-w-lg">
+                Complementamos o seu pedido com ofertas exclusivas para quem acabou de finalizar a compra.
               </p>
             </div>
             <Button variant="ghost" onClick={() => navigate("/")} className="self-start sm:self-auto">
@@ -149,7 +174,7 @@ const UpsellPage = () => {
           </div>
 
           {relatedProducts.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {relatedProducts.map((product) => (
                 <Link
                   key={product.id}

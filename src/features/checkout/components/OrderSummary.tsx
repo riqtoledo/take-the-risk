@@ -11,7 +11,10 @@ type OrderSummaryProps = {
 const OrderSummary = ({ shippingCost, isFreeShipping }: OrderSummaryProps) => {
   const { items, subtotal } = useCart();
 
-  const total = useMemo(() => subtotal + (isFreeShipping ? 0 : shippingCost), [subtotal, shippingCost, isFreeShipping]);
+  const total = useMemo(
+    () => subtotal + (isFreeShipping ? 0 : shippingCost),
+    [subtotal, shippingCost, isFreeShipping]
+  );
 
   return (
     <aside className="h-fit rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -46,10 +49,18 @@ const OrderSummary = ({ shippingCost, isFreeShipping }: OrderSummaryProps) => {
           <span>Subtotal</span>
           <span>{subtotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
         </div>
-        <div className="flex justify-between text-muted-foreground">
-          <span>Entrega</span>
-          <span>{isFreeShipping ? "Gratis" : shippingCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Frete</span>
+          {isFreeShipping ? (
+            <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              Frete grátis
+            </span>
+          ) : (
+            <span>{shippingCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+          )}
         </div>
+
         <div className="flex justify-between border-t border-border pt-2 text-base font-semibold text-foreground">
           <span>Total</span>
           <span>{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>

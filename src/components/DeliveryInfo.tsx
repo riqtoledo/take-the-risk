@@ -16,7 +16,6 @@ const DeliveryInfo = () => {
   const [address, setAddress] = useState<ViaCepResult | null>(null);
   const [shipping, setShipping] = useState<{ price: number; days: number } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
-  // QA: Abortamos requisicoes anteriores para evitar que respostas antigas sobrescrevam o estado.
 
   const rawCep = cleanCep(cep);
 
@@ -46,7 +45,7 @@ const DeliveryInfo = () => {
       requestRef.current?.abort();
       requestRef.current = null;
       setLoading(false);
-      setError("CEP invalido. Informe 8 digitos.");
+      setError("CEP inválido. Informe 8 dígitos.");
       return;
     }
 
@@ -59,12 +58,10 @@ const DeliveryInfo = () => {
       const data = await fetchAddressByCep(rawCep, { signal: controller.signal });
       if (requestRef.current !== controller) return;
       setAddress(data);
-      setShipping(calculateShippingEstimate(rawCep));
+      setShipping(calculateShippingEstimate(rawCep)); // deve retornar { price: 0, days: X }
       setError(null);
     } catch (err: unknown) {
-      if ((err as DOMException)?.name === "AbortError") {
-        return;
-      }
+      if ((err as DOMException)?.name === "AbortError") return;
       if (requestRef.current !== controller) return;
       const message = err instanceof Error ? err.message : "Erro ao consultar CEP. Tente novamente.";
       setError(message);
@@ -79,13 +76,13 @@ const DeliveryInfo = () => {
   return (
     <div className="border-y border-border bg-card">
       <div className="container mx-auto px-4 py-4">
-        <h3 className="mb-3 font-semibold text-foreground">Informacoes de entrega</h3>
+        <h3 className="mb-3 font-semibold text-foreground">Informações de entrega</h3>
 
         <form onSubmit={handleCalculate} className="mb-3">
           <div className="flex items-center gap-3">
             <MapPin className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">Calcular frete</p>
+              <p className="text-sm font-medium text-foreground">Calcular prazo</p>
 
               <div className="mt-2 flex gap-2">
                 <input
@@ -105,7 +102,9 @@ const DeliveryInfo = () => {
               </div>
 
               {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
-              {address ? <p className="mt-2 text-xs text-muted-foreground">{stringifyAddress(address)}</p> : null}
+              {address ? (
+                <p className="mt-2 text-xs text-muted-foreground">{stringifyAddress(address)}</p>
+              ) : null}
             </div>
           </div>
         </form>
@@ -113,7 +112,7 @@ const DeliveryInfo = () => {
         <div className="flex items-start gap-3 rounded-md bg-accent p-3">
           <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
           <div className="flex-1">
-            <p className="text-xs text-foreground">Nao sei meu CEP</p>
+            <p className="text-xs text-foreground">Não sei meu CEP</p>
             <a
               className="mt-1 inline-block text-xs text-primary underline"
               href="https://buscacepinter.correios.com.br/app/endereco/index.php"
@@ -127,9 +126,9 @@ const DeliveryInfo = () => {
 
         {shipping ? (
           <div className="mt-3 rounded-md border bg-muted p-3">
-            <p className="text-sm font-medium">Frete estimado</p>
+            <p className="text-sm font-medium text-green-600">Frete grátis</p>
             <p className="text-sm">
-              Valor: R$ {shipping.price.toFixed(2)} • Prazo: {shipping.days} dias uteis
+              {shipping.days > 0 ? `Prazo: até ${shipping.days} dia(s) úteis` : "Prazo a confirmar"}
             </p>
           </div>
         ) : null}

@@ -23,9 +23,9 @@ export const formatCep = (value: string): string => {
 export const calculateShippingEstimate = (cep: string): ShippingEstimate => {
   const prefix = Number(cep.slice(0, 2) || 0);
   if (Number.isNaN(prefix)) return { price: 0, days: 0 };
-  if (prefix <= 20) return { price: 12.9, days: 7 };
-  if (prefix <= 60) return { price: 9.9, days: 5 };
-  return { price: 14.9, days: 10 };
+  if (prefix <= 20) return { price: 0, days: 7 };
+  if (prefix <= 60) return { price: 0, days: 5 };
+  return { price: 0, days: 10 };
 };
 
 type FetchAddressOptions = {
