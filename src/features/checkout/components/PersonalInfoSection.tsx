@@ -38,10 +38,7 @@ const PersonalInfoSection = ({ value, onChange }: PersonalInfoSectionProps) => {
 
   return (
     <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-foreground">Dados pessoais</h2>
-        <span className="text-xs font-medium uppercase text-primary">Editar</span>
-      </div>
+      <h2 className="text-base font-semibold text-foreground">Dados pessoais</h2>
 
       <div className="mt-4 grid gap-3">
         <div className="grid gap-1.5">

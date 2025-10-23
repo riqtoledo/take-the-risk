@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Newsletter from "@/components/Newsletter";
 import Footer from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
 import PersonalInfoSection, { PersonalInfo } from "./components/PersonalInfoSection";
 import DeliverySection, { DeliveryMode, DeliveryAddressDetails } from "./components/DeliverySection";
-import PaymentSection from "./components/PaymentSection";
+import PaymentSection, { PaymentMethod } from "./components/PaymentSection";
 import OrderSummary from "./components/OrderSummary";
 import CheckoutSummaryBar from "./components/CheckoutSummaryBar";
 import { toast } from "@/components/ui/use-toast";
@@ -47,6 +47,7 @@ const CheckoutPage = () => {
   });
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("delivery");
   const [cep, setCep] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [isCalculatingCep, setIsCalculatingCep] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
   const [address, setAddress] = useState<ViaCepResult | null>(null);
@@ -58,6 +59,7 @@ const CheckoutPage = () => {
   const [pixError, setPixError] = useState<string | null>(null);
   const [pixResult, setPixResult] = useState<Awaited<ReturnType<typeof criarPix>> | null>(null);
   const pixPollingRef = useRef<number | null>(null);
+  const pixDocumentNumberRef = useRef<string | null>(null);
   const shippingRequestRef = useRef<AbortController | null>(null);
   // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
 
@@ -73,19 +75,20 @@ const CheckoutPage = () => {
         setAddressDetails({ ...defaultAddressDetails, ...parsed.addressDetails });
       }
       if (typeof parsed?.addressConfirmed === "boolean") setAddressConfirmed(parsed.addressConfirmed);
+      if (parsed?.paymentMethod === "card" || parsed?.paymentMethod === "pix") setPaymentMethod(parsed.paymentMethod);
     } catch {
       // ignore malformed storage
     }
   }, []);
 
   useEffect(() => {
-    const payload = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed };
+    const payload = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed, paymentMethod };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       // ignore storage write errors
     }
-  }, [personalInfo, deliveryMode, cep, addressDetails, addressConfirmed]);
+  }, [personalInfo, deliveryMode, cep, addressDetails, addressConfirmed, paymentMethod]);
 
   useEffect(() => {
     return () => {
@@ -216,6 +219,35 @@ const CheckoutPage = () => {
     }
   };
 
+  const generateRandomCpfDigits = () => {
+    const computeDigit = (base: number[]) => {
+      let factor = base.length + 1;
+      const total = base.reduce((acc, value) => {
+        const sum = acc + value * factor;
+        factor -= 1;
+        return sum;
+      }, 0);
+      const remainder = total % 11;
+      return remainder < 2 ? 0 : 11 - remainder;
+    };
+    while (true) {
+      const baseDigits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
+      if (new Set(baseDigits).size === 1) continue;
+      const firstDigit = computeDigit(baseDigits);
+      const secondDigit = computeDigit([...baseDigits, firstDigit]);
+      const cpfDigits = [...baseDigits, firstDigit, secondDigit];
+      if (new Set(cpfDigits).size === 1) continue;
+      return cpfDigits.join("");
+    }
+  };
+
+  const resolvePixDocumentNumber = () => {
+    if (pixDocumentNumberRef.current) return pixDocumentNumberRef.current;
+    const generated = generateRandomCpfDigits();
+    pixDocumentNumberRef.current = generated;
+    return generated;
+  };
+
   const cleanedPhoneDigits = personalInfo.phone.replace(/\D/g, "");
   const hasContactInfo =
     personalInfo.name.trim().length > 2 && personalInfo.email.includes("@") && cleanedPhoneDigits.length >= 10;
@@ -226,7 +258,7 @@ const CheckoutPage = () => {
   const hasNumber = addressDetails.number.trim().length > 0;
   const isAddressComplete = hasValidCep && hasAddressInfo && hasNumber;
   const canSubmitDelivery = !requiresAddress || (addressConfirmed && isAddressComplete);
-  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery;
+  const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery && paymentMethod === "pix";
 
   const stopPixPolling = () => {
     if (pixPollingRef.current) {
@@ -271,7 +303,7 @@ const CheckoutPage = () => {
   const handleFinishOrder = async () => {
     if (!isFormValid || isSubmitting) return;
     setIsSubmitting(true);
-    const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true };
+    const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true, paymentMethod };
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(checkoutSnapshot));
@@ -282,6 +314,7 @@ const CheckoutPage = () => {
     try {
       const amountInCents = Math.max(Math.round(total * 100), 0);
       const externalRef = `PED-${Date.now()}`;
+      const documentNumber = resolvePixDocumentNumber();
       const payload = {
         name: personalInfo.name.trim(),
         email: personalInfo.email.trim(),
@@ -289,6 +322,7 @@ const CheckoutPage = () => {
         amount: amountInCents,
         description: `Pedido ${externalRef}`,
         externalRef,
+        documentNumber,
       };
 
       const result = await criarPix(payload);
@@ -329,8 +363,8 @@ const CheckoutPage = () => {
   const pixQrSrc = pixResult?.pix?.qrcode ?? "";
   const pixStatusLabel = pixResult
     ? pixResult.paid
-      ? "✅ Pago"
-      : `⏳ ${pixResult.status ?? "Pendente"}`
+      ? "âœ… Pago"
+      : `â³ ${pixResult.status ?? "Pendente"}`
     : "Aguardando pagamento";
 
   const handleCopyPixCode = async () => {
@@ -400,7 +434,7 @@ const CheckoutPage = () => {
                   </span>
                 </div>
               </section>
-              <PaymentSection />
+              <PaymentSection selected={paymentMethod} onChange={setPaymentMethod} />
               <button
                 type="button"
                 className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -499,3 +533,5 @@ const CheckoutPage = () => {
 };
 
 export default CheckoutPage;
+
+

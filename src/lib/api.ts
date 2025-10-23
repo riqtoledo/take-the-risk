@@ -25,19 +25,23 @@ export type PixPayload = {
   amount: number;
   description: string;
   externalRef: string;
+  documentNumber: string;
 };
 
 export type PixInfo = {
-  qrcode: string;
-  copia_e_cola?: string;
+  qrcode: string | null;
+  copia_e_cola?: string | null;
 };
 
 export type PixResult = {
+  ok?: boolean;
+  transactionId?: string;
   id?: string;
   paymentId?: string;
-  status: string;
+  status?: string;
   paid?: boolean;
-  pix: PixInfo;
+  amount?: number;
+  pix?: PixInfo | null;
 };
 
 const normalizeError = (error: unknown) => {
@@ -70,4 +74,3 @@ export async function consultarPix(id: string): Promise<PixResult> {
     throw error;
   }
 }
-

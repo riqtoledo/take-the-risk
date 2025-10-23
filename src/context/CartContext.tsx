@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useMemo, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { Product } from "@/lib/products";
+
+const CART_STORAGE_KEY = "cart_snapshot_v1";
 
 export type CartLine = {
   product: Product;
@@ -29,8 +31,27 @@ export const useCart = (): CartContextType => {
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  const [items, setItems] = useState<CartLine[]>([]);
+  const [items, setItems] = useState<CartLine[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = window.localStorage.getItem(CART_STORAGE_KEY);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as Array<{ product: Product; quantity: number }>;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((line) => line?.product?.id && line.quantity > 0);
+    } catch {
+      return [];
+    }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // ignore storage failures
+    }
+  }, [items]);
 
   const totalQuantity = useMemo(
     () => items.reduce((acc, item) => acc + item.quantity, 0),
