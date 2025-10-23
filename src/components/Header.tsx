@@ -59,8 +59,9 @@ function Header() {
         // ignore storage errors
       }
       setOpenCepDialog(false);
-    } catch (e: any) {
-      setCepError(e?.message || "Erro ao buscar CEP");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Erro ao buscar CEP";
+      setCepError(message);
     } finally {
       setLoadingCep(false);
     }

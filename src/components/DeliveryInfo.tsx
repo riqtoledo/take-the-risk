@@ -61,12 +61,13 @@ const DeliveryInfo = () => {
       setAddress(data);
       setShipping(calculateShippingEstimate(rawCep));
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if ((err as DOMException)?.name === "AbortError") {
         return;
       }
       if (requestRef.current !== controller) return;
-      setError(err?.message ?? "Erro ao consultar CEP. Tente novamente.");
+      const message = err instanceof Error ? err.message : "Erro ao consultar CEP. Tente novamente.";
+      setError(message);
     } finally {
       if (requestRef.current === controller) {
         setLoading(false);

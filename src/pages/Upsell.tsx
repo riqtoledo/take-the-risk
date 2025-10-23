@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type MouseEvent } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Newsletter from "@/components/Newsletter";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import { useCart } from "@/context/CartContext";
 import {
   getAllProducts,
@@ -29,7 +30,7 @@ type UpsellLocationState = {
 const UpsellPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clearCart } = useCart();
+  const { clearCart, addToCart } = useCart();
 
   const state = (location.state ?? undefined) as UpsellLocationState | undefined;
 
@@ -42,6 +43,15 @@ const UpsellPage = () => {
       navigate("/", { replace: true });
     }
   }, [state?.transactionId, navigate]);
+
+  const handleAddUpsellItem = (event: MouseEvent<HTMLButtonElement>, product: Product) => {
+    event.preventDefault();
+    addToCart(product, 1);
+    toast({
+      title: "Oferta adicionada ao carrinho",
+      description: `${product.name} foi adicionado ao carrinho.`,
+    });
+  };
 
   const relatedProducts = useMemo(() => {
     if (!state?.items?.length) {
@@ -78,7 +88,7 @@ const UpsellPage = () => {
     return null;
   }
 
-  const totalAmount = state.amount / 100;
+  const totalAmount = Math.max(state.amount, 0) / 100;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -86,7 +96,7 @@ const UpsellPage = () => {
 
       <main className="container mx-auto px-4 py-10 space-y-10">
         <section className="mx-auto max-w-3xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-semibold text-foreground">Pagamento confirmado! 🎉</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Pagamento confirmado!</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Obrigado pela sua compra. Recebemos o pagamento do pedido{" "}
             <span className="font-semibold text-foreground">{state.transactionId}</span>.
@@ -120,7 +130,7 @@ const UpsellPage = () => {
               className="w-full sm:w-auto"
               onClick={() => navigate("/checkout")}
             >
-              Fazer novo pedido
+              Ir para o checkout
             </Button>
           </div>
         </section>
@@ -128,7 +138,7 @@ const UpsellPage = () => {
         <section className="space-y-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Talvez você também goste</h2>
+              <h2 className="text-lg font-semibold text-foreground">Talvez voce tambem goste</h2>
               <p className="text-sm text-muted-foreground">
                 Selecionamos ofertas relacionadas ao seu pedido. Aproveite para complementar a sua compra!
               </p>
@@ -138,29 +148,48 @@ const UpsellPage = () => {
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {relatedProducts.map((product) => (
-              <Link
-                key={product.id}
-                to={`/product/${product.id}`}
-                className="group flex h-full flex-col rounded-xl border border-border bg-card p-4 transition hover:-translate-y-1 hover:shadow-lg"
-              >
-                <div className="aspect-square w-full overflow-hidden rounded-lg border border-border bg-background p-3">
-                  <img
-                    src={product.images?.[0]}
-                    alt={product.name}
-                    className="h-full w-full object-contain transition-all group-hover:scale-105"
-                  />
-                </div>
-                <div className="mt-4 space-y-2 text-sm">
-                  <p className="text-xs font-medium uppercase text-primary">{product.badgeLabel}</p>
-                  <h3 className="text-base font-semibold text-foreground line-clamp-2">{product.name}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2">{product.shortDescription}</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(product.price)}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {relatedProducts.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {relatedProducts.map((product) => (
+                <Link
+                  key={product.id}
+                  to={`/product/${product.id}`}
+                  className="group flex h-full flex-col rounded-xl border border-border bg-card p-4 transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="aspect-square w-full overflow-hidden rounded-lg border border-border bg-background p-3">
+                    <img
+                      src={product.images?.[0]}
+                      alt={product.name}
+                      className="h-full w-full object-contain transition-all group-hover:scale-105"
+                    />
+                  </div>
+                  <div className="mt-4 flex flex-1 flex-col justify-between text-sm">
+                    <div className="space-y-2">
+                      {product.badgeLabel ? (
+                        <p className="text-xs font-medium uppercase text-primary">{product.badgeLabel}</p>
+                      ) : null}
+                      <h3 className="text-base font-semibold text-foreground line-clamp-2">{product.name}</h3>
+                      {product.shortDescription ? (
+                        <p className="text-sm text-muted-foreground line-clamp-2">{product.shortDescription}</p>
+                      ) : null}
+                      <p className="text-lg font-bold text-foreground">{formatCurrency(product.price)}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="mt-4 w-full"
+                      onClick={(event) => handleAddUpsellItem(event, product)}
+                    >
+                      Adicionar ao carrinho
+                    </Button>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background p-6 text-sm text-muted-foreground">
+              Novas ofertas estarao disponiveis em breve. Enquanto isso, explore a loja completa.
+            </div>
+          )}
         </section>
       </main>
 

@@ -47,7 +47,9 @@ const RelatedProducts = ({ product }: { product?: Product }) => {
     const id = setInterval(() => {
       try {
         api.scrollNext();
-      } catch {}
+      } catch (_error) {
+        // Ignore autoplay failures (e.g., carousel already destroyed)
+      }
     }, 3500);
     return () => clearInterval(id);
   }, [api]);

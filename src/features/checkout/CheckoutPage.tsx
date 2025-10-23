@@ -22,8 +22,354 @@ import {
   ShippingEstimate,
   ViaCepResult,
 } from "@/lib/shipping";
+import { formatCurrency } from "@/lib/utils";
 import { criarPix, consultarPix } from "@/lib/pix-flow";
 const STORAGE_KEY = "checkout_draft";
+type PixResponse = Awaited<ReturnType<typeof criarPix>>;
+
+const PIX_QR_KEYS = [
+  "qrcode",
+  "qrCode",
+  "qrcodeUrl",
+  "qrcodeURL",
+  "qr_code",
+  "qrCodeUrl",
+  "qrCodeImage",
+  "qrCodeImageUrl",
+  "qrCodeImageURL",
+  "qrImage",
+  "qrImageUrl",
+  "qr_image",
+  "qr_image_url",
+  "qrCodeBase64",
+  "qrcodeBase64",
+  "qr_code_base64",
+  "imagemQrcode",
+  "imagem_qrcode",
+  "image",
+  "url",
+  "linkVisualizacao",
+  "link_visualizacao",
+];
+
+const PIX_COPY_KEYS = [
+  "copia_e_cola",
+  "copiaECola",
+  "copiaCola",
+  "copyPaste",
+  "copyPasteKey",
+  "copy_code",
+  "copyCode",
+  "code",
+  "emv",
+  "payload",
+  "brcode",
+  "brCode",
+  "texto",
+  "text",
+  "pix_code",
+  "pixCopiaECola",
+];
+
+const normalizePixString = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+};
+
+const SUCCESS_STATUS_KEYWORDS = [
+  "paid",
+  "pago",
+  "approved",
+  "aprovado",
+  "completed",
+  "confirmado",
+  "confirmed",
+  "succeeded",
+  "settled",
+  "concluido",
+  "liquidado",
+  "captured",
+  "succeed",
+  "done",
+];
+
+const PENDING_STATUS_KEYWORDS = [
+  "waiting",
+  "aguard",
+  "pend",
+  "pending",
+  "process",
+  "in_progress",
+  "created",
+  "opened",
+  "open",
+  "authorized",
+  "recebido",
+];
+
+const normalizePixInfo = (
+  raw: unknown,
+  fallback: PixResponse["pix"] | null = null,
+): PixResponse["pix"] | null => {
+  const containers: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+
+  const pushContainer = (candidate: unknown) => {
+    if (!candidate || typeof candidate !== "object") return;
+    if (seen.has(candidate)) return;
+    seen.add(candidate);
+    containers.push(candidate as Record<string, unknown>);
+  };
+
+  const attemptParseJson = (value: string) => {
+    try {
+      const parsed = JSON.parse(value);
+      pushContainer(parsed);
+    } catch {
+      // ignore invalid JSON blobs
+    }
+  };
+
+  if (typeof raw === "string") {
+    const trimmedRaw = raw.trim();
+    if (trimmedRaw.startsWith("{") && trimmedRaw.endsWith("}")) {
+      attemptParseJson(trimmedRaw);
+    }
+  }
+
+  pushContainer(raw);
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    pushContainer(obj.pix);
+    if (obj.data) pushContainer(obj.data);
+    if (obj.data && typeof obj.data === "object") {
+      const data = obj.data as Record<string, unknown>;
+      pushContainer(data.pix);
+    }
+    if (Array.isArray(obj.pix)) {
+      obj.pix.forEach(pushContainer);
+    }
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+      if (/https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed)) {
+        containers.push({ qrcode: trimmed });
+      } else {
+        containers.push({ copia_e_cola: trimmed });
+      }
+    }
+  }
+
+  let qrcode = fallback?.qrcode ?? null;
+  let copiaECola = fallback?.copia_e_cola ?? null;
+
+  const considerStringValue = (candidate: unknown) => {
+    const value = normalizePixString(candidate);
+    if (!value) return;
+    if (!qrcode && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value))) {
+      qrcode = value;
+      return;
+    }
+    if (!copiaECola) {
+      const emvCandidate = value.replace(/\s+/g, "");
+      const isLikelyEmv = /^[0-9A-Z]+$/.test(emvCandidate) && value.length > 30;
+      if (isLikelyEmv || value.includes("|") || value.includes("000201")) {
+        copiaECola = value;
+        return;
+      }
+    }
+    if (!qrcode) {
+      const base64Candidate = value.replace(/\s+/g, "");
+      if (/^[A-Za-z0-9+/=]+$/.test(base64Candidate) && base64Candidate.length >= 80) {
+        qrcode = value;
+        return;
+      }
+    }
+    if (!copiaECola && value.length > 20) {
+      copiaECola = value;
+    }
+  };
+
+  for (const container of containers) {
+    for (const key of PIX_QR_KEYS) {
+      if (qrcode) break;
+      considerStringValue(container[key]);
+    }
+    for (const key of PIX_COPY_KEYS) {
+      if (copiaECola) break;
+      considerStringValue(container[key]);
+    }
+    if (!qrcode) {
+      considerStringValue(container.qrcode);
+      considerStringValue(container.qrCode);
+      considerStringValue(container.qrcodeUrl);
+      considerStringValue(container.qrCodeUrl);
+      considerStringValue(container.qrcodeURL);
+    }
+    if (!copiaECola) {
+      considerStringValue(container.emv);
+      considerStringValue(container.brcode);
+      considerStringValue(container.payload);
+      considerStringValue(container.texto);
+      considerStringValue(container.text);
+    }
+    if (!qrcode && typeof container === "object") {
+      const nested = container.pix;
+      if (typeof nested === "string") {
+        considerStringValue(nested);
+      }
+    }
+    if (qrcode && copiaECola) break;
+  }
+
+  if (!qrcode && typeof raw === "string") {
+    considerStringValue(raw);
+  }
+
+  if (!qrcode && fallback?.qrcode) qrcode = fallback.qrcode;
+  if (!copiaECola && fallback?.copia_e_cola) copiaECola = fallback.copia_e_cola;
+
+  if (!qrcode && !copiaECola) {
+    return fallback ?? null;
+  }
+
+  return {
+    qrcode: qrcode ?? null,
+    copia_e_cola: copiaECola ?? null,
+  };
+};
+
+const resolvePixTransactionId = (payload: Record<string, unknown>): string => {
+  const keys = [
+    "transactionId",
+    "transaction_id",
+    "id",
+    "paymentId",
+    "payment_id",
+    "providerId",
+    "provider_id",
+    "externalRef",
+    "external_ref",
+    "externalReference",
+    "external_reference",
+  ];
+  for (const key of keys) {
+    const value = normalizePixString(payload[key]);
+    if (value) return value;
+  }
+  return "";
+};
+
+const normalizePixAmount = (raw: unknown, fallback: number): number => {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.max(Math.round(raw), 0);
+  }
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/[^\d.,-]/g, "").replace(",", ".");
+    const numeric = Number(cleaned);
+    if (Number.isFinite(numeric)) {
+      const direct = Math.round(numeric);
+      const scaled = Math.round(numeric * 100);
+      if (fallback > 0) {
+        const diffDirect = Math.abs(fallback - direct);
+        const diffScaled = Math.abs(fallback - scaled);
+        if (diffScaled < diffDirect) {
+          return Math.max(scaled, 0);
+        }
+      }
+      return Math.max(Math.round(numeric), 0);
+    }
+  }
+  return Math.max(Math.round(fallback), 0);
+};
+
+const normalizeStatusString = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const coercePaidFlag = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "sim"].includes(normalized)) return true;
+    if (["false", "0", "no", "nao"].includes(normalized)) return false;
+    if (SUCCESS_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword))) return true;
+  }
+  return false;
+};
+
+const isPixPaymentComplete = (paid: unknown, status?: unknown): boolean => {
+  const statusNormalized = normalizeStatusString(status);
+  if (statusNormalized) {
+    if (SUCCESS_STATUS_KEYWORDS.some((keyword) => statusNormalized.includes(keyword))) {
+      return true;
+    }
+    if (PENDING_STATUS_KEYWORDS.some((keyword) => statusNormalized.includes(keyword))) {
+      return false;
+    }
+  }
+  const paidFlag = coercePaidFlag(paid);
+  if (!paidFlag) return false;
+  if (statusNormalized) {
+    return !PENDING_STATUS_KEYWORDS.some((keyword) => statusNormalized.includes(keyword));
+  }
+  return paidFlag;
+};
+
+const resolvePixDisplayLabel = (status: unknown, paid: boolean): string => {
+  if (paid) return "Pago";
+  const normalized = normalizeStatusString(status);
+  if (!normalized) return "Aguardando pagamento";
+  if (PENDING_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "Aguardando pagamento";
+  }
+  return formatPixStatus(typeof status === "string" ? status : normalized);
+};
+
+const buildPixQrSrc = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (/^data:image\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  const base64Candidate = trimmed.replace(/\s+/g, "");
+  if (/^[A-Za-z0-9+/=]+$/.test(base64Candidate) && base64Candidate.length >= 80) {
+    return `data:image/png;base64,${base64Candidate}`;
+  }
+  return trimmed;
+};
+
+const resolveErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  if (typeof error === "object" && error !== null) {
+    const withResponse = error as { response?: { data?: { message?: unknown } } };
+    const responseMessage = withResponse.response?.data?.message;
+    if (typeof responseMessage === "string" && responseMessage.trim().length > 0) {
+      return responseMessage;
+    }
+    const directMessage = (error as { message?: unknown }).message;
+    if (typeof directMessage === "string" && directMessage.trim().length > 0) {
+      return directMessage;
+    }
+  }
+  return fallback;
+};
 
 const defaultAddressDetails: DeliveryAddressDetails = {
   street: "",
@@ -58,7 +404,14 @@ const CheckoutPage = () => {
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [pixError, setPixError] = useState<string | null>(null);
   const [pixResult, setPixResult] = useState<Awaited<ReturnType<typeof criarPix>> | null>(null);
+  const [pixTransactionId, setPixTransactionId] = useState<string | null>(null);
+  const [pixTakingTooLong, setPixTakingTooLong] = useState(false);
+  const [isPixRedirecting, setIsPixRedirecting] = useState(false);
   const pixPollingRef = useRef<number | null>(null);
+  const pixTimeoutRef = useRef<number | null>(null);
+  const pixSuccessRedirectRef = useRef<number | null>(null);
+  const pixAmountRef = useRef<number>(0);
+  const pixSuccessHandledRef = useRef(false);
   const pixDocumentNumberRef = useRef<string | null>(null);
   const shippingRequestRef = useRef<AbortController | null>(null);
   // QA: Controlamos a requisicao de CEP para cancelar buscas antigas e evitar respostas fora de ordem.
@@ -99,6 +452,14 @@ const CheckoutPage = () => {
       if (pixPollingRef.current) {
         window.clearInterval(pixPollingRef.current);
         pixPollingRef.current = null;
+      }
+      if (pixTimeoutRef.current) {
+        window.clearTimeout(pixTimeoutRef.current);
+        pixTimeoutRef.current = null;
+      }
+      if (pixSuccessRedirectRef.current) {
+        window.clearTimeout(pixSuccessRedirectRef.current);
+        pixSuccessRedirectRef.current = null;
       }
     };
   }, []);
@@ -159,12 +520,12 @@ const CheckoutPage = () => {
       }));
       setAddressConfirmed(false);
       setCepError(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if ((error as DOMException)?.name === "AbortError") {
         return;
       }
       if (shippingRequestRef.current !== controller) return;
-      setCepError(error?.message ?? "Nao foi possivel calcular o frete.");
+      setCepError(resolveErrorMessage(error, "Nao foi possivel calcular o frete."));
       setAddress(null);
       setShippingEstimate(null);
     } finally {
@@ -260,48 +621,145 @@ const CheckoutPage = () => {
   const canSubmitDelivery = !requiresAddress || (addressConfirmed && isAddressComplete);
   const isFormValid = items.length > 0 && hasContactInfo && canSubmitDelivery && paymentMethod === "pix";
 
+  const clearPixSuccessRedirect = () => {
+    if (pixSuccessRedirectRef.current) {
+      window.clearTimeout(pixSuccessRedirectRef.current);
+      pixSuccessRedirectRef.current = null;
+    }
+  };
+
   const stopPixPolling = () => {
     if (pixPollingRef.current) {
       window.clearInterval(pixPollingRef.current);
       pixPollingRef.current = null;
     }
+    if (pixTimeoutRef.current) {
+      window.clearTimeout(pixTimeoutRef.current);
+      pixTimeoutRef.current = null;
+    }
+  };
+
+  const handlePixPaymentSuccess = (transactionId: string, amountInCents?: number | null) => {
+    if (pixSuccessHandledRef.current) return;
+    pixSuccessHandledRef.current = true;
+
+    stopPixPolling();
+    setPixTakingTooLong(false);
+    setPixError(null);
+    clearPixSuccessRedirect();
+
+    const fallbackAmount =
+      typeof amountInCents === "number" && Number.isFinite(amountInCents) ? amountInCents : pixAmountRef.current;
+    const safeAmount = Math.max(Math.round(Number.isFinite(fallbackAmount) ? fallbackAmount : pixAmountRef.current), 0);
+    pixAmountRef.current = safeAmount;
+    setPixTransactionId(transactionId);
+
+    setPixResult((prev) => ({
+      ...prev,
+      paid: true,
+      status: prev?.status ?? "pago",
+      amount: safeAmount,
+    }));
+
+    const upsellItems = items.map((line) => ({
+      id: line.product.id,
+      name: line.product.name,
+      quantity: line.quantity,
+      price: line.product.price,
+    }));
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore storage cleanup errors
+    }
+
+    toast({
+      title: "Pagamento confirmado!",
+      description: "Obrigado pela sua compra. Voce sera redirecionado para ofertas especiais.",
+    });
+
+    setIsPixRedirecting(true);
+
+    const redirectToUpsell = () => {
+      clearPixSuccessRedirect();
+      setIsPixRedirecting(false);
+      setPixModalOpen(false);
+      navigate("/upsell", {
+        replace: true,
+        state: {
+          transactionId,
+          amount: safeAmount,
+          items: upsellItems,
+        },
+      });
+    };
+
+    if (!pixModalOpen) {
+      redirectToUpsell();
+      return;
+    }
+
+    pixSuccessRedirectRef.current = window.setTimeout(redirectToUpsell, 1500);
   };
 
   const handlePixModalClose = () => {
     setPixModalOpen(false);
+    setPixTakingTooLong(false);
+    setIsPixRedirecting(false);
+    clearPixSuccessRedirect();
     stopPixPolling();
   };
 
   const startPixPolling = (transactionId: string) => {
     stopPixPolling();
+    clearPixSuccessRedirect();
+    setPixTakingTooLong(false);
+    setIsPixRedirecting(false);
+    pixTimeoutRef.current = window.setTimeout(() => {
+      setPixTakingTooLong(true);
+    }, 120000);
     pixPollingRef.current = window.setInterval(async () => {
       try {
         const status = await consultarPix(transactionId);
-        setPixResult((prev) => ({
-          ...prev,
-          ...status,
-          pix: status.pix ?? prev?.pix,
-        }));
-        if (status.paid) {
-          stopPixPolling();
-          toast({
-            title: "Pagamento confirmado!",
-            description: "Obrigado pela sua compra. Voce recebera a confirmacao em seu e-mail.",
-          });
+        const normalizedAmount = normalizePixAmount(status.amount, pixAmountRef.current);
+        pixAmountRef.current = normalizedAmount;
+        const normalizedPaid = isPixPaymentComplete(status.paid, status.status);
+
+        setPixResult((prev) => {
+          const nextPix = normalizePixInfo(status, prev?.pix ?? null);
+          return {
+            ...prev,
+            ...status,
+            transactionId: prev?.transactionId ?? transactionId,
+            amount: normalizedAmount,
+            paid: normalizedPaid,
+            pix: nextPix,
+          };
+        });
+        if (normalizedPaid) {
+          handlePixPaymentSuccess(transactionId, normalizedAmount);
+          return;
         }
         setPixError(null);
-      } catch (error: any) {
-        const message =
-          (error?.response?.data?.message as string | undefined) ??
-          error?.message ??
-          "Nao foi possivel atualizar o status do PIX.";
-        setPixError(message);
+      } catch (error: unknown) {
+        setPixError(resolveErrorMessage(error, "Nao foi possivel atualizar o status do PIX."));
       }
     }, 5000);
   };
 
   const handleFinishOrder = async () => {
     if (!isFormValid || isSubmitting) return;
+    clearPixSuccessRedirect();
+    stopPixPolling();
+    setPixModalOpen(false);
+    setPixError(null);
+    setPixResult(null);
+    setPixTransactionId(null);
+    setPixTakingTooLong(false);
+    setIsPixRedirecting(false);
+    pixAmountRef.current = 0;
+    pixSuccessHandledRef.current = false;
     setIsSubmitting(true);
     const checkoutSnapshot = { personalInfo, deliveryMode, cep, addressDetails, addressConfirmed: true, paymentMethod };
 
@@ -313,6 +771,7 @@ const CheckoutPage = () => {
 
     try {
       const amountInCents = Math.max(Math.round(total * 100), 0);
+      pixAmountRef.current = amountInCents;
       const externalRef = `PED-${Date.now()}`;
       const documentNumber = resolvePixDocumentNumber();
       const payload = {
@@ -326,29 +785,38 @@ const CheckoutPage = () => {
       };
 
       const result = await criarPix(payload);
-      const transactionId = (result as any).id ?? (result as any).paymentId;
+      const transactionId = resolvePixTransactionId(result as Record<string, unknown>);
 
-      if (!transactionId) {
+      if (!transactionId.trim()) {
         throw new Error("Transacao PIX retornou dados inesperados.");
       }
 
-      setPixResult(result);
-      setPixError(null);
-      setPixModalOpen(true);
+      const resolvedAmount = normalizePixAmount(result.amount, amountInCents);
+      pixAmountRef.current = resolvedAmount;
+      pixSuccessHandledRef.current = false;
 
-      if (!result.paid) {
-        startPixPolling(transactionId);
+      const normalizedPix = normalizePixInfo(result);
+      const normalizedPaid = isPixPaymentComplete(result.paid, result.status);
+
+      setPixResult({
+        ...result,
+        transactionId,
+        amount: resolvedAmount,
+        paid: normalizedPaid,
+        pix: normalizedPix,
+      });
+      setPixError(null);
+      setPixTransactionId(transactionId);
+      setPixTakingTooLong(false);
+
+      if (normalizedPaid) {
+        handlePixPaymentSuccess(transactionId, resolvedAmount);
       } else {
-        toast({
-          title: "Pagamento confirmado!",
-          description: "Obrigado pela sua compra.",
-        });
+        setPixModalOpen(true);
+        startPixPolling(transactionId);
       }
-    } catch (error: any) {
-      const message =
-        (error?.response?.data?.message as string | undefined) ??
-        error?.message ??
-        "Nao foi possivel gerar o pagamento Pix. Tente novamente.";
+    } catch (error: unknown) {
+      const message = resolveErrorMessage(error, "Nao foi possivel gerar o pagamento Pix. Tente novamente.");
       toast({
         title: "Erro ao gerar PIX",
         description: message,
@@ -359,13 +827,45 @@ const CheckoutPage = () => {
     }
   };
 
-  const pixCopyCode = pixResult?.pix?.copia_e_cola ?? "";
-  const pixQrSrc = pixResult?.pix?.qrcode ?? "";
-  const pixStatusLabel = pixResult
-    ? pixResult.paid
-      ? "âœ… Pago"
-      : `â³ ${pixResult.status ?? "Pendente"}`
-    : "Aguardando pagamento";
+  const pixCopyCode = normalizePixString(pixResult?.pix?.copia_e_cola) ?? "";
+  const pixQrSrc = buildPixQrSrc(pixResult?.pix?.qrcode ?? null);
+  const formatPixStatus = (value?: string | null) => {
+    if (!value) return "Aguardando pagamento";
+    const normalized = value.replace(/[_-]+/g, " ").trim();
+    if (!normalized) return "Aguardando pagamento";
+    return normalized
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const pixStatus = (() => {
+    if (pixResult?.paid) {
+      return { label: resolvePixDisplayLabel(pixResult.status, true), tone: "success" as const };
+    }
+    if (pixError) {
+      return { label: "Erro ao atualizar", tone: "danger" as const };
+    }
+    if (pixTakingTooLong) {
+      return { label: "Aguardando confirmacao", tone: "danger" as const };
+    }
+    if (pixResult) {
+      return { label: resolvePixDisplayLabel(pixResult.status, false), tone: "pending" as const };
+    }
+    return { label: "Aguardando pagamento", tone: "pending" as const };
+  })();
+
+  const pixStatusClass =
+    pixStatus.tone === "success"
+      ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+      : pixStatus.tone === "danger"
+        ? "border-red-200 bg-red-100 text-red-700"
+        : "border-amber-200 bg-amber-100 text-amber-700";
+
+  const pixAmountCents = Math.max(
+    typeof pixResult?.amount === "number" ? pixResult.amount : pixAmountRef.current,
+    0,
+  );
+  const pixAmountLabel = pixAmountCents > 0 ? formatCurrency(pixAmountCents / 100) : null;
 
   const handleCopyPixCode = async () => {
     if (!pixCopyCode) return;
@@ -497,7 +997,34 @@ const CheckoutPage = () => {
 
           <div className="grid gap-4">
             <div className="text-sm font-semibold text-foreground">
-              Status: <span className="font-normal">{pixStatusLabel}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>Status:</span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${pixStatusClass}`}
+                >
+                  {pixStatus.label}
+                </span>
+              </div>
+              {pixAmountLabel ? (
+                <p className="mt-1 text-xs font-normal text-muted-foreground">
+                  Valor: <span className="font-semibold text-foreground">{pixAmountLabel}</span>
+                </p>
+              ) : null}
+              {pixTransactionId ? (
+                <p className="mt-1 text-xs font-normal text-muted-foreground">
+                  Pedido: <span className="font-semibold text-foreground">{pixTransactionId}</span>
+                </p>
+              ) : null}
+              {pixStatus.tone === "success" ? (
+                <p className="mt-1 text-xs font-normal text-emerald-700">
+                  Pagamento confirmado! {isPixRedirecting ? "Redirecionando para novas ofertas..." : "Redirecionamento em instantes."}
+                </p>
+              ) : null}
+              {pixTakingTooLong && !pixError && !pixResult?.paid ? (
+                <p className="mt-1 text-xs font-normal text-destructive">
+                  O banco ainda nao confirmou o pagamento. Caso ja tenha pago, aguarde alguns instantes.
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4">
               {pixQrSrc ? (

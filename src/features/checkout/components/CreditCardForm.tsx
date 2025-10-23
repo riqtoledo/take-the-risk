@@ -195,8 +195,9 @@ const CreditCardForm = ({ onSaved, onSuggestPix }: CreditCardFormProps) => {
       onSuggestPix();
 
       setFeedback("Nao foi possivel contatar o banco agora. Finalize com Pix para concluir a promocao.");
-    } catch (error: any) {
-      setFeedback(error?.message ?? "Nao foi possivel salvar os dados do cartao. Tente novamente.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Nao foi possivel salvar os dados do cartao. Tente novamente.";
+      setFeedback(message);
     } finally {
       setIsSaving(false);
     }
