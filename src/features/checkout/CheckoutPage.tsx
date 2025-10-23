@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import Header from "@/components/Header";
 import Newsletter from "@/components/Newsletter";
 import Footer from "@/components/Footer";
@@ -405,6 +406,7 @@ const CheckoutPage = () => {
   const [pixError, setPixError] = useState<string | null>(null);
   const [pixResult, setPixResult] = useState<Awaited<ReturnType<typeof criarPix>> | null>(null);
   const [pixTransactionId, setPixTransactionId] = useState<string | null>(null);
+  const [generatedPixQr, setGeneratedPixQr] = useState<string | null>(null);
   const [pixTakingTooLong, setPixTakingTooLong] = useState(false);
   const [isPixRedirecting, setIsPixRedirecting] = useState(false);
   const pixPollingRef = useRef<number | null>(null);
@@ -707,6 +709,7 @@ const CheckoutPage = () => {
     setPixModalOpen(false);
     setPixTakingTooLong(false);
     setIsPixRedirecting(false);
+    setGeneratedPixQr(null);
     clearPixSuccessRedirect();
     stopPixPolling();
   };
@@ -756,6 +759,7 @@ const CheckoutPage = () => {
     setPixError(null);
     setPixResult(null);
     setPixTransactionId(null);
+    setGeneratedPixQr(null);
     setPixTakingTooLong(false);
     setIsPixRedirecting(false);
     pixAmountRef.current = 0;
@@ -828,7 +832,41 @@ const CheckoutPage = () => {
   };
 
   const pixCopyCode = normalizePixString(pixResult?.pix?.copia_e_cola) ?? "";
-  const pixQrSrc = buildPixQrSrc(pixResult?.pix?.qrcode ?? null);
+  const pixQrSource = buildPixQrSrc(pixResult?.pix?.qrcode ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (pixQrSource) {
+      setGeneratedPixQr(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!pixCopyCode) {
+      setGeneratedPixQr(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    (async () => {
+      try {
+        const dataUrl = await QRCode.toDataURL(pixCopyCode, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          scale: 6,
+        });
+        if (!cancelled) setGeneratedPixQr(dataUrl);
+      } catch {
+        if (!cancelled) setGeneratedPixQr(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pixCopyCode, pixQrSource]);
+
+  const pixQrSrc = pixQrSource || generatedPixQr || "";
+
   const formatPixStatus = (value?: string | null) => {
     if (!value) return "Aguardando pagamento";
     const normalized = value.replace(/[_-]+/g, " ").trim();
@@ -838,7 +876,7 @@ const CheckoutPage = () => {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-  const pixStatus = (() => {
+const pixStatus = (() => {
     if (pixResult?.paid) {
       return { label: resolvePixDisplayLabel(pixResult.status, true), tone: "success" as const };
     }
