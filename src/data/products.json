@@ -2,162 +2,145 @@
   "products": [
     {
       "id": "pampers-g-98",
-      "name": "Fralda Pampers Confort Sec G 98 Unidades",
-      "shortDescription": "Fralda Pampers Confort Sec G - 98 unidades",
-      "description": "Fralda Pampers Confort Sec tamanho G com 98 unidades. Oferece absorcao rapida e protecao contra vazamentos, com ajuste confortavel para o bebe e toque macio.",
-      "price": 198.0,
-      "oldPrice": 214.9,
-      "shippingPrice": 12.9,
-      "badgeLabel": "Economico",
+      "name": "Kit 3 Fraldas Pampers Confort Sec",
+      "shortDescription": "Kit 3 Fraldas Pampers Confort Sec",
+      "description": "Oferece absorção rápida e proteção contra vazamentos, mantendo o bebê seco e confortável por mais tempo. Possui toque macio e ajuste perfeito. Disponível nos tamanhos P ao XXG.",
+      "price": 80.0,
+      "oldPrice": 349.99,
+      "shippingPrice": 14.32,
+      "badgeLabel": "Promocional",
       "promotion": {
-        "title": "Leve 2 pague R$ 135,74 (cada)",
-        "subtitle": "Compre 2 ou mais e economize"
+        "title": "Levando esse kit você está ganhando 70% nessa oferta.",
+        "subtitle": "Promoção válida por tempo limitado."
       },
       "sales": {
         "percentage": 96,
         "count": 100108
       },
-      "images": [
-        "@assets/product-main.png",
-        "@assets/product-main.png"
-      ],
+      "images": ["@assets/Kit-pampers.png"],
       "reviews": [
-        {
-          "user": "Luiz",
-          "rating": 5,
-          "comment": "Muito absorvente e pratico para a noite inteira."
-        },
-        {
-          "user": "Carlos",
-          "rating": 4,
-          "comment": "Boa qualidade e chegou dentro do prazo."
-        },
-        {
-          "user": "Fernanda",
-          "rating": 5,
-          "comment": "Bebe fica sequinho por mais tempo, recomendo."
-        }
+        { "user": "Ana Souza", "rating": 5, "comment": "Excelente qualidade! Mantém meu bebê sequinho por horas." },
+        { "user": "Mariana Silva", "rating": 5, "comment": "Super macia e confortável, adorei o toque delicado." },
+        { "user": "Camila Ribeiro", "rating": 5, "comment": "Muito boa, não vaza e dura a noite toda." },
+        { "user": "Patrícia Gomes", "rating": 4, "comment": "Ótimo custo-benefício, cumpre o que promete." },
+        { "user": "Larissa Oliveira", "rating": 5, "comment": "Melhor fralda que já usei no meu bebê!" },
+        { "user": "Juliana Fernandes", "rating": 5, "comment": "Absorve super rápido, recomendo muito." }
       ],
-      "relatedIds": [
-        "wipes-sensitive-50",
-        "pampers-m-80",
-        "kit-troca-rapida"
-      ]
+      "relatedIds": ["wipes-sensitive-50", "pampers-m-80", "kit-troca-rapida"],
+      "isDiaper": true,
+      "diaperSizes": [
+        { "code": "P", "label": "P (3–6 kg)", "range": "3–6 kg | 216 un", "stock": 999 },
+        { "code": "M", "label": "M (5–9 kg)", "range": "5–9 kg | 336 un", "stock": 999, "navigateToId": "pampers-m-80" },
+        { "code": "G", "label": "G (8–12 kg)", "range": "8–12 kg | 384 un", "stock": 999, "default": true },
+        { "code": "XG", "label": "XG (12–15 kg)", "range": "12–15 kg | 348 un", "stock": 999 },
+        { "code": "XXG", "label": "XXG (+14 kg)", "range": "+14 kg | 336 un", "stock": 999 },
+        { "code": "XXXG", "label": "XXXG (+19 kg)", "range": "+19 kg | 222 un", "stock": 999 }
+      ],
+      "sizeGuide": "Dica: se o elástico marcar a pele, considere um tamanho acima."
     },
+
     {
-      "id": "wipes-sensitive-50",
-      "name": "Lencos Umedecidos Sensitive 50 Unidades",
-      "shortDescription": "Lenco umedecido hipoalergenico para pele sensivel",
-      "description": "Lencos umedecidos suaves e hipoalergenicos, ideais para a pele delicada do bebe. Embalagem com 50 unidades e fechamento que preserva a umidade.",
-      "price": 10.0,
-      "shippingPrice": 5.0,
-      "badgeLabel": "Mais vendido",
+      "id": "pampers-wipes-192",
+      "name": "Lenços Umedecidos Pampers Cuidado de Bebê 192 Unidades",
+      "shortDescription": "Leve 4, pague 3 — Lenços umedecidos Pampers",
+      "description": "Lenços umedecidos Pampers com toque suave e fórmula hipoalergênica. Perfeito para limpeza do bebê, mãos e rosto. Embalagem promocional com 192 lenços (4 pacotes de 48 unidades).",
+      "price": 38,
+      "oldPrice": 49.90,
+      "shippingPrice": 6.90,
+      "badgeLabel": "Leve 4, pague 3",
       "promotion": {
-        "title": "Na compra de 3 unidades ganhe 10% off",
-        "subtitle": "Desconto aplicado automaticamente no carrinho"
+        "title": "Leve 4 pacotes e pague apenas 3!",
+        "subtitle": "Promoção por tempo limitado."
       },
       "sales": {
-        "percentage": 92,
-        "count": 45231
+        "percentage": 97,
+        "count": 21042
       },
-      "images": [
-        "@assets/product-main.png"
-      ],
+      "images": ["@assets/Lenço-Pampers.jpg"],
       "reviews": [
-        {
-          "user": "Mariana",
-          "rating": 5,
-          "comment": "Muito macio e nao irrita a pele sensivel do meu bebe."
-        },
-        {
-          "user": "Joao",
-          "rating": 4,
-          "comment": "Cheiro suave e embalagem pratica, so poderia vir com mais unidades."
-        }
+        { "user": "Fernanda", "rating": 5, "comment": "Cheiro suave e ótimo para o dia a dia!" },
+        { "user": "Lucas", "rating": 4, "comment": "Bom custo-benefício e embalagem prática." }
       ],
-      "relatedIds": [
-        "pampers-g-98",
-        "kit-troca-rapida"
-      ]
+      "relatedIds": ["cetaphil-espuma-236", "pomada-hidratante-bebe", "pampers-wipes-192", "nan-comfor-hmo-800"],
+      "isDiaper": false
     },
+
     {
-      "id": "pampers-m-80",
-      "name": "Fralda Pampers Confort Sec M 80 Unidades",
-      "shortDescription": "Fralda Pampers Confort Sec M - 80 unidades",
-      "description": "Fralda com alto poder de absorcao e barreiras reforcadas contra vazamentos. Indicada para uso diurno e noturno com ajuste anatomico.",
-      "price": 165.0,
-      "oldPrice": 189.9,
-      "shippingPrice": 10.0,
-      "badgeLabel": "Novo",
+      "id": "cetaphil-espuma-236",
+      "name": "Cetaphil Pro AC Dermacontrol Espuma de Limpeza 236mL",
+      "shortDescription": "Espuma de limpeza facial para pele oleosa",
+      "description": "Remove o excesso de oleosidade e impurezas sem ressecar. Desenvolvido com complexo de zinco, ideal para controle de brilho e cuidado diário da pele oleosa e acneica.",
+      "price": 90.0,
+      "oldPrice": 109.90,
+      "shippingPrice": 8.50,
+      "badgeLabel": "Dermocosmético",
       "promotion": {
-        "title": "Assine e ganhe 12% off na recorrencia",
-        "subtitle": "Cancelamento facil e sem taxa"
-      },
-      "sales": {
-        "percentage": 89,
-        "count": 83422
-      },
-      "images": [
-        "@assets/product-main.png"
-      ],
-      "reviews": [
-        {
-          "user": "Bruna",
-          "rating": 4,
-          "comment": "Boa absorcao mas o ajuste poderia ser um pouco mais firme."
-        },
-        {
-          "user": "Paulo",
-          "rating": 5,
-          "comment": "Fralda favorita aqui em casa, segura bem e nao deixa cheiro."
-        },
-        {
-          "user": "Isabela",
-          "rating": 4,
-          "comment": "Meio cara, mas a qualidade compensa."
-        }
-      ],
-      "relatedIds": [
-        "pampers-g-98",
-        "wipes-sensitive-50",
-        "kit-troca-rapida"
-      ]
-    },
-    {
-      "id": "kit-troca-rapida",
-      "name": "Kit Troca Rapida com Bolsa Organizador",
-      "shortDescription": "Kit com tapete, lencos e pomada em miniaturas",
-      "description": "Kit completo para trocas fora de casa composto por bolsa dobravel, tapete impermeavel, lencos umedecidos de bolso e mini pomada para assaduras.",
-      "price": 80.0,
-      "shippingPrice": 7.5,
-      "badgeLabel": "Exclusivo online",
-      "promotion": {
-        "title": "Frete gratis acima de R$ 149,00",
-        "subtitle": "Combine com outros itens e economize"
+        "title": "Ganhe 10% OFF na compra de 2 unidades",
+        "subtitle": "Desconto automático no carrinho."
       },
       "sales": {
         "percentage": 94,
-        "count": 25210
+        "count": 18421
       },
-      "images": [
-        "@assets/product-main.png"
-      ],
+      "images": ["@assets/cetaphil-espuma-236.png"],
       "reviews": [
-        {
-          "user": "Tatiane",
-          "rating": 5,
-          "comment": "Bolsa muito pratica e cabe tudo que preciso nas saídas."
-        },
-        {
-          "user": "Rafael",
-          "rating": 4,
-          "comment": "Tapete impermeavel de otima qualidade, poderia ter mais pomada."
-        }
+        { "user": "Gabriela", "rating": 5, "comment": "Melhor espuma para pele oleosa que já usei!" },
+        { "user": "Renata", "rating": 4, "comment": "Limpa bem e deixa sensação leve, mas o preço é salgado." }
       ],
-      "relatedIds": [
-        "pampers-g-98",
-        "wipes-sensitive-50"
-      ]
+      "relatedIds": ["pampers-g-98", "pomada-hidratante-bebe", "pampers-wipes-192"],
+      "isDiaper": false
+    },
+
+    {
+      "id": "nan-comfor-hmo-800",
+      "name": "Nestlé NAN Comfor 2 HMO 800g",
+      "shortDescription": "Fórmula infantil de 6 a 12 meses",
+      "description": "Fórmula infantil de seguimento com prebióticos, DHA, ARA e nucleotídeos. Indicada para lactentes de 6 a 12 meses. Auxilia na digestão e no desenvolvimento saudável.",
+      "price": 88.0,
+      "oldPrice": 94.90,
+      "shippingPrice": 12.90,
+      "badgeLabel": "Mais vendido",
+      "promotion": {
+        "title": "Compre 2 e ganhe 5% de desconto",
+        "subtitle": "Ideal para reposição mensal."
+      },
+      "sales": {
+        "percentage": 98,
+        "count": 31280
+      },
+      "images": ["@assets/nan-comfor-hmo-800.png"],
+      "reviews": [
+        { "user": "Patrícia", "rating": 5, "comment": "Meu bebê se adaptou super bem, recomendo!" },
+        { "user": "Rogério", "rating": 5, "comment": "Produto confiável e de ótima qualidade." }
+      ],
+      "relatedIds": ["pampers-g-98", "pomada-hidratante-bebe", "pampers-wipes-192"],
+      "isDiaper": false
+    },
+
+    {
+      "id": "pomada-hidratante-bebe",
+      "name": "Pomada Hidratante Baby Care 120g",
+      "shortDescription": "Protege contra assaduras e hidrata profundamente",
+      "description": "Pomada com óxido de zinco e vitamina E, ajuda a prevenir e tratar assaduras mantendo a pele do bebê protegida e macia. Testada dermatologicamente.",
+      "price": 33.0,
+      "oldPrice": 39.90,
+      "shippingPrice": 6.50,
+      "badgeLabel": "Novo",
+      "promotion": {
+        "title": "Frete grátis acima de R$ 99",
+        "subtitle": "Combine com outros produtos da linha Baby Care."
+      },
+      "sales": {
+        "percentage": 91,
+        "count": 7403
+      },
+      "images": ["@assets/pomada-hidratante-bebe.png"],
+      "reviews": [
+        { "user": "Cláudia", "rating": 5, "comment": "Textura ótima e cheiro suave!" },
+        { "user": "Tatiane", "rating": 4, "comment": "Cumpre bem o papel, protege e hidrata." }
+      ],
+      "relatedIds": ["pampers-wipes-192", "pampers-g-98", "nan-comfor-hmo-800"],
+      "isDiaper": false
     }
   ]
 }

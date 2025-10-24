@@ -25,6 +25,14 @@ import {
 } from "@/lib/shipping";
 import { formatCurrency } from "@/lib/utils";
 import { criarPix, consultarPix } from "@/lib/pix-flow";
+
+// ===== META PIXEL: tipos mínimos =====
+declare global {
+  interface Window {
+    fbq?: (...args: any[]) => void;
+  }
+}
+
 const STORAGE_KEY = "checkout_draft";
 type PixResponse = Awaited<ReturnType<typeof criarPix>>;
 
@@ -202,28 +210,28 @@ const normalizePixInfo = (
   for (const container of containers) {
     for (const key of PIX_QR_KEYS) {
       if (qrcode) break;
-      considerStringValue(container[key]);
+      considerStringValue((container as any)[key]);
     }
     for (const key of PIX_COPY_KEYS) {
       if (copiaECola) break;
-      considerStringValue(container[key]);
+      considerStringValue((container as any)[key]);
     }
     if (!qrcode) {
-      considerStringValue(container.qrcode);
-      considerStringValue(container.qrCode);
-      considerStringValue(container.qrcodeUrl);
-      considerStringValue(container.qrCodeUrl);
-      considerStringValue(container.qrcodeURL);
+      considerStringValue((container as any).qrcode);
+      considerStringValue((container as any).qrCode);
+      considerStringValue((container as any).qrcodeUrl);
+      considerStringValue((container as any).qrCodeUrl);
+      considerStringValue((container as any).qrcodeURL);
     }
     if (!copiaECola) {
-      considerStringValue(container.emv);
-      considerStringValue(container.brcode);
-      considerStringValue(container.payload);
-      considerStringValue(container.texto);
-      considerStringValue(container.text);
+      considerStringValue((container as any).emv);
+      considerStringValue((container as any).brcode);
+      considerStringValue((container as any).payload);
+      considerStringValue((container as any).texto);
+      considerStringValue((container as any).text);
     }
     if (!qrcode && typeof container === "object") {
-      const nested = container.pix;
+      const nested = (container as any).pix;
       if (typeof nested === "string") {
         considerStringValue(nested);
       }
@@ -263,7 +271,7 @@ const resolvePixTransactionId = (payload: Record<string, unknown>): string => {
     "external_reference",
   ];
   for (const key of keys) {
-    const value = normalizePixString(payload[key]);
+    const value = normalizePixString((payload as any)[key]);
     if (value) return value;
   }
   return "";
@@ -676,6 +684,23 @@ const CheckoutPage = () => {
       price: line.product.price,
     }));
 
+    // ===== META PIXEL: Purchase ao confirmar PIX =====
+    try {
+      const numItems = items.reduce((acc, l) => acc + l.quantity, 0);
+      window.fbq?.("track", "Purchase", {
+        value: safeAmount / 100,      // reais
+        currency: "BRL",
+        contents: items.map((l) => ({
+          id: String(l.product.id),
+          quantity: l.quantity,
+          item_price: l.product.price, // reais por item
+        })),
+        content_type: "product",
+        num_items: numItems,
+        external_id: transactionId,
+      });
+    } catch {}
+
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -833,6 +858,14 @@ const CheckoutPage = () => {
       if (normalizedPaid) {
         handlePixPaymentSuccess(transactionId, resolvedAmount);
       } else {
+        // ===== META PIXEL: InitiateCheckout ao abrir modal Pix =====
+        try {
+          window.fbq?.("track", "InitiateCheckout", {
+            value: (pixAmountRef.current ?? 0) / 100,
+            currency: "BRL",
+            num_items: items.reduce((acc, l) => acc + l.quantity, 0),
+          });
+        } catch {}
         setPixModalOpen(true);
         startPixPolling(transactionId);
       }
@@ -978,7 +1011,7 @@ const pixStatus = (() => {
                 shippingCost={shippingCost}
               />
               <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <h2 className="text-base font-semibold text-foreground">Pacotes e prazos</h2>
+                <h2 className="text/base font-semibold text-foreground">Pacotes e prazos</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Pedido entregue em 1 etapa. Confira o prazo estimado abaixo.
                 </p>
